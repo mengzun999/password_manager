@@ -71,4 +71,18 @@ class AppConstants {
 
   // 手势图案的哈希值（用于验证手势是否正确）
   static const String keyGestureHash = 'gesture_hash';
+
+  // 加密存储的 masterKey（用于手势）
+  static const String keyEncryptedMasterKeyForGesture =
+      'encrypted_master_key_for_gesture';
+
+  // 生物识别密钥标识符
+  static const String keyBiometricKeyId = 'biometric_key_id';
+
+  // 加密存储的 masterKey（用于生物识别）
+  static const String keyEncryptedMasterKeyForBiometric =
+      'encrypted_master_key_for_biometric';
+
+  // 生物识别密钥列表
+  static const String keyBiometricKeysList = 'biometric_keys_list';
 }

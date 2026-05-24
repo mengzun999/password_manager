@@ -1,5 +1,6 @@
 import 'dart:math'; // 用于 Random 随机数
 import 'dart:convert'; // 用于 base64 编解码
+import 'package:flutter/services.dart';
 
 class Helpers {
   static String generateUuid() {
@@ -46,5 +47,25 @@ class Helpers {
   // Base64 解码
   static List<int> base64DecodeBytes(String base64String) {
     return base64.decode(base64String);
+  }
+
+  static Future<void> copyToClipboard(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+  }
+
+  /// 从剪贴板读取文本
+  static Future<String?> getFromClipboard() async {
+    final clipboardData = await Clipboard.getData('text/plain');
+    return clipboardData?.text;
+  }
+  /// 生成随机字符串
+  static String generateRandomString(int length, String chars) {
+    final random = Random.secure();
+    return String.fromCharCodes(
+      Iterable.generate(
+        length,
+            (_) => chars.codeUnitAt(random.nextInt(chars.length)),
+      ),
+    );
   }
 }

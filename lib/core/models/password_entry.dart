@@ -70,4 +70,10 @@ class PasswordEntry {
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  //便于调试
+  @override
+  String toString() {
+    return 'PasswordEntry(id: $id, title: $title, username: $username, updatedAt: $updatedAt)';
+  }
 }

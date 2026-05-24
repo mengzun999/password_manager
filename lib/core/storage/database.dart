@@ -1,4 +1,5 @@
 import 'package:password_manager/constants/app_constants.dart';
+import 'package:password_manager/core/models/image_model.dart';
 import 'package:password_manager/core/models/password_entry.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -155,5 +156,28 @@ class DatabaseHelper {
     if (await imagesDir.exists()) {
       await imagesDir.delete(recursive: true);
     }
+  }
+  // 插入图片
+  static Future<void> insertImage(ImageModel image) async {
+    final db = await database;
+    await db.insert('images', image.toMap());
+  }
+
+  // 删除图片
+  static Future<void> deleteImage(String id) async {
+    final db = await database;
+    await db.delete('images', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // 获取条目的所有图片
+  static Future<List<ImageModel>> getImagesByEntryId(String entryId) async {
+    final db = await database;
+    final maps = await db.query(
+      'images',
+      where: 'entry_id = ?',
+      whereArgs: [entryId],
+      orderBy: 'sort_order ASC',
+    );
+    return maps.map((map) => ImageModel.fromMap(map)).toList();
   }
 }
