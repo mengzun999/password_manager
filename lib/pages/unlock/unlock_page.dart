@@ -36,6 +36,9 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
   /// 主密码输入框控制器
   final _passwordController = TextEditingController();
 
+  /// 手势画板的 Key，用于调用 clearPattern 方法
+  final GlobalKey<GesturePatternViewState> _gestureKey = GlobalKey();
+
   // ========== UI 状态变量 ==========
 
   /// 当前解锁模式
@@ -58,19 +61,48 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
   /// 当前手势图案选中的点（用于显示）
   List<int> _currentPattern = [];
 
+  /// 是否正在检查初始化状态
+  bool _isChecking = true;
+
   // ========== 生命周期方法 ==========
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
-    _tryBiometricUnlock();
+    Future.microtask(() => _checkAndNavigate());
   }
 
   @override
   void dispose() {
     _passwordController.dispose();
     super.dispose();
+  }
+
+  // ========== 初始化检查 ==========
+
+  /// 检查是否已完成首次设置，未完成则跳转到设置页
+  Future<void> _checkAndNavigate() async {
+    setState(() => _isChecking = true);
+
+    // 检查是否已初始化（是否有 salt 和主密码哈希）
+    final hasSalt = await SecureStorage.containsKey(AppConstants.keySalt);
+    final hasMasterHash = await SecureStorage.containsKey(
+      AppConstants.keyMasterPasswordHash,
+    );
+    final isInitialized = hasSalt && hasMasterHash;
+
+    if (!isInitialized) {
+      // 未初始化，跳转到设置页
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, AppRoutes.setup);
+      }
+      return;
+    }
+
+    // 已初始化，加载设置并尝试生物识别
+    setState(() => _isChecking = false);
+    await _loadSettings();
+    _tryBiometricUnlock();
   }
 
   // ========== 设置加载方法 ==========
@@ -108,12 +140,12 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     if (!isAuthenticated || !mounted) return;
 
     // 4. 生物识别成功，获取加密的 masterKey 并解密
-    final biometricKeyId = await SecureStorage.read(AppConstants.keyBiometricKeyId);
+    final biometricKeyBase64 = await SecureStorage.read(AppConstants.keyBiometricKeyId);
     final encryptedMasterKeyBase64 = await SecureStorage.read(
       AppConstants.keyEncryptedMasterKeyForBiometric,
     );
 
-    if (biometricKeyId == null || encryptedMasterKeyBase64 == null) {
+    if (biometricKeyBase64 == null || encryptedMasterKeyBase64 == null) {
       // 没有存储加密的 masterKey，切换到密码模式
       setState(() {
         _unlockMode = 0;
@@ -129,8 +161,8 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     });
 
     try {
-      // 解密 masterKey
-      final biometricKey = Uint8List.fromList(utf8.encode(biometricKeyId));
+      // ✅ 解密 masterKey：biometricKeyBase64 是 Base64 编码的 32 字节密钥
+      final biometricKey = base64Decode(biometricKeyBase64);
       final encryptedMasterKey = base64Decode(encryptedMasterKeyBase64);
       final masterKey = await AESGCMHelper.decryptBytes(encryptedMasterKey, biometricKey);
 
@@ -139,7 +171,10 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       authNotifier.unlock(masterKey: masterKey);
 
       if (mounted) {
-        Navigator.pushReplacementNamed(context, AppRoutes.home);
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          AppRoutes.home,
+              (route) => false,
+        );
       }
     } catch (e) {
       setState(() {
@@ -162,6 +197,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
   /// 3. 计算当前图案的 SHA-256 哈希
   /// 4. 比较两个哈希值是否一致
   /// 5. 一致则解密 masterKey 并直接解锁
+  /// 6. 不一致则清空画板，让用户重新绘制
   Future<void> _verifyGestureAndUnlock(List<int> pattern) async {
     // 1. 检查长度：至少连接4个点
     if (pattern.length < 4) {
@@ -169,6 +205,8 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         _error = '至少连接4个点';
         _currentPattern = [];
       });
+      // 清空画板
+      _gestureKey.currentState?.clearPattern();
       return;
     }
 
@@ -189,6 +227,8 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         _isLoading = false;
         _currentPattern = [];
       });
+      // 清空画板
+      _gestureKey.currentState?.clearPattern();
       return;
     }
 
@@ -203,6 +243,8 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         _isLoading = false;
         _currentPattern = [];
       });
+      // 清空画板，让用户重新绘制
+      _gestureKey.currentState?.clearPattern();
       return;
     }
 
@@ -218,7 +260,10 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       authNotifier.unlock(masterKey: masterKey);
 
       if (mounted) {
-        Navigator.pushReplacementNamed(context, AppRoutes.home);
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          AppRoutes.home,
+              (route) => false,
+        );
       }
     } catch (e) {
       setState(() {
@@ -226,6 +271,8 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         _isLoading = false;
         _currentPattern = [];
       });
+      // 清空画板
+      _gestureKey.currentState?.clearPattern();
     }
   }
 
@@ -259,9 +306,11 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
     if (masterKey != null) {
       authNotifier.unlock(masterKey: masterKey);
-
       if (mounted) {
-        Navigator.pushReplacementNamed(context, AppRoutes.home);
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          AppRoutes.home,
+              (route) => false,
+        );
       }
     } else {
       setState(() {
@@ -280,6 +329,8 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       _error = null;
       _currentPattern = [];
     });
+    // 清空画板
+    _gestureKey.currentState?.clearPattern();
   }
 
   /// 切换到密码解锁模式
@@ -295,6 +346,15 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 正在检查初始化状态，显示加载
+    if (_isChecking) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('解锁'),
@@ -307,22 +367,27 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
             ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.lock,
-              size: 80,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 40),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.lock,
+                size: 80,
+                color: Colors.grey[400],
+              ),
+              const SizedBox(height: 40),
 
-            _unlockMode == 0
-                ? _buildPasswordInput()
-                : _buildGestureInput(),
-          ],
+              _unlockMode == 0
+                  ? _buildPasswordInput()
+                  : _buildGestureInput(),
+
+              // ✅ 底部留白
+              const SizedBox(height: 40),
+            ],
+          ),
         ),
       ),
     );
@@ -370,13 +435,20 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
               foregroundColor: Colors.white,
             ),
             child: _isLoading
-                ? const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
+                ? const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(width: 12),
+                Text('验证中...', style: TextStyle(fontSize: 16, color: Colors.white)),
+              ],
             )
                 : const Text('解锁', style: TextStyle(fontSize: 16)),
           ),
@@ -402,30 +474,25 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
           ),
         ),
         const SizedBox(height: 20),
-        GesturePatternView(
-          onPatternComplete: (pattern) {
-            _verifyGestureAndUnlock(pattern);
-          },
-          onPatternChanged: (pattern) {
-            setState(() {
-              _currentPattern = pattern;
-            });
-          },
+        SizedBox(
+          width: 280,
+          height: 280,
+          child: GesturePatternView(
+            key: _gestureKey,
+            onPatternComplete: (pattern) {
+              _verifyGestureAndUnlock(pattern);
+            },
+            onPatternChanged: (pattern) {
+              setState(() {
+                _currentPattern = pattern;
+              });
+            },
+          ),
         ),
         if (_error != null) ...[
           const SizedBox(height: 16),
           Text(_error!, style: const TextStyle(color: Colors.red)),
         ],
-        const SizedBox(height: 20),
-        TextButton(
-          onPressed: () {
-            setState(() {
-              _currentPattern = [];
-              _error = null;
-            });
-          },
-          child: const Text('重绘'),
-        ),
       ],
     );
   }

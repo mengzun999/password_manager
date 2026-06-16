@@ -140,12 +140,20 @@ class BackupService {
   /// 选择备份文件
   static Future<String?> pickBackupFile() async {
     final result = await FilePicker.platform.pickFiles(
-      allowedExtensions: ['enc'],
+      type: FileType.any,  // ✅ 改为 any，让用户可以选所有文件
       dialogTitle: '选择备份文件',
     );
 
     if (result != null && result.files.single.path != null) {
-      return result.files.single.path;
+      final path = result.files.single.path!;
+      // 手动检查扩展名
+      if (path.endsWith('.enc')) {
+        return path;
+      } else {
+        // 提示用户选择正确的文件
+        print('请选择 .enc 格式的备份文件');
+        return null;
+      }
     }
     return null;
   }

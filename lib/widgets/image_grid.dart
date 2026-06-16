@@ -2,26 +2,19 @@ import 'package:flutter/material.dart';
 import 'dart:typed_data';
 
 /// 图片网格组件
-///
-/// 显示图片网格，支持添加、删除、查看大图
 class ImageGrid extends StatefulWidget {
-  /// 图片列表（Uint8List格式）
   final List<Uint8List> images;
-
-  /// 添加图片回调
   final VoidCallback onAddImage;
-
-  /// 拍照回调
   final VoidCallback onTakePhoto;
-
-  /// 从文件选择回调
   final VoidCallback onPickFile;
-
-  /// 删除图片回调
   final Function(int index) onDeleteImage;
 
-  /// 是否正在加载
+  /// ✅ 新增：点击图片查看大图回调
+  final Function(int index) onViewImage;
+
   final bool isLoading;
+  final int maxImages;
+  final int currentCount;
 
   const ImageGrid({
     super.key,
@@ -30,7 +23,10 @@ class ImageGrid extends StatefulWidget {
     required this.onTakePhoto,
     required this.onPickFile,
     required this.onDeleteImage,
+    required this.onViewImage, // ✅ 新增
     this.isLoading = false,
+    this.maxImages = 20,
+    this.currentCount = 0,
   });
 
   @override
@@ -40,13 +36,29 @@ class ImageGrid extends StatefulWidget {
 class _ImageGridState extends State<ImageGrid> {
   @override
   Widget build(BuildContext context) {
+    // 计算还能添加多少张
+    final remainingSlots = widget.maxImages - widget.currentCount;
+
+    // 显示的图片数量（已添加的图片 + 添加按钮）
+    // 至少保留1个添加按钮位置
+    final displayCount = widget.images.length + (remainingSlots > 0 ? 1 : 0);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 标题
-        const Text(
-          '图片',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+        // 标题行
+        Row(
+          children: [
+            const Text(
+              '图片',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+            const Spacer(),
+            Text(
+              '${widget.currentCount}/${widget.maxImages}',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
 
@@ -60,46 +72,89 @@ class _ImageGridState extends State<ImageGrid> {
             mainAxisSpacing: 8,
             childAspectRatio: 1,
           ),
-          itemCount: widget.images.length + 3, // 3个添加按钮
+          itemCount: displayCount,
           itemBuilder: (context, index) {
-            // 添加按钮区域
+            // 如果索引超出图片列表，显示添加按钮
             if (index >= widget.images.length) {
-              return _buildAddButton(index - widget.images.length);
+              return _buildAddButton();
             }
 
-            // 图片显示
+            // 显示图片
             return _buildImageItem(widget.images[index], index);
           },
         ),
+
+        if (widget.isLoading)
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
       ],
     );
   }
 
-  /// 添加按钮
-  Widget _buildAddButton(int buttonIndex) {
-    final icons = [Icons.add, Icons.camera_alt, Icons.folder_open];
-    final labels = ['相册', '拍照', '文件'];
-    final onTaps = [widget.onAddImage, widget.onTakePhoto, widget.onPickFile];
-
+  /// 添加按钮（点击弹出选择菜单）
+  Widget _buildAddButton() {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(color: Colors.grey.shade300),
       ),
-      child: InkWell(
-        onTap: onTaps[buttonIndex],
-        borderRadius: BorderRadius.circular(8),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icons[buttonIndex], size: 32, color: Colors.grey.shade600),
-            const SizedBox(height: 4),
-            Text(
-              labels[buttonIndex],
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+      child: PopupMenuButton<String>(
+        onSelected: (value) {
+          switch (value) {
+            case 'gallery':
+              widget.onAddImage();
+              break;
+            case 'camera':
+              widget.onTakePhoto();
+              break;
+            case 'file':
+              widget.onPickFile();
+              break;
+          }
+        },
+        itemBuilder: (context) => [
+          const PopupMenuItem(
+            value: 'gallery',
+            child: Row(
+              children: [
+                Icon(Icons.photo_library),
+                SizedBox(width: 12),
+                Text('从相册选择'),
+              ],
             ),
-          ],
+          ),
+          const PopupMenuItem(
+            value: 'camera',
+            child: Row(
+              children: [
+                Icon(Icons.camera_alt),
+                SizedBox(width: 12),
+                Text('拍照'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'file',
+            child: Row(
+              children: [
+                Icon(Icons.folder_open),
+                SizedBox(width: 12),
+                Text('从文件选择'),
+              ],
+            ),
+          ),
+        ],
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.grey.shade100,
+          ),
+          child: const Center(
+            child: Icon(Icons.add, size: 32, color: Colors.grey),
+          ),
         ),
       ),
     );
@@ -110,12 +165,15 @@ class _ImageGridState extends State<ImageGrid> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 图片
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.memory(
-            imageBytes,
-            fit: BoxFit.cover,
+        // 图片（点击查看大图）
+        GestureDetector(
+          onTap: () => widget.onViewImage(index),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.memory(
+              imageBytes,
+              fit: BoxFit.cover,
+            ),
           ),
         ),
 
@@ -126,13 +184,14 @@ class _ImageGridState extends State<ImageGrid> {
           child: GestureDetector(
             onTap: () => widget.onDeleteImage(index),
             child: Container(
+              padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 color: Colors.black.withValues(alpha: 0.6),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.close,
-                size: 20,
+                size: 18,
                 color: Colors.white,
               ),
             ),

@@ -2,11 +2,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../constants/app_constants.dart';
 
 /// 普通配置存储类
-/// 用于存储非敏感的配置信息（主题、开关等）
 class SharedPrefs {
   static SharedPreferences? _prefs;
 
-  /// 初始化（在 main 函数中调用）
+  /// 初始化
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
   }
@@ -51,17 +50,6 @@ class SharedPrefs {
     return _prefs!.getString(AppConstants.keyAppListViewMode) ?? 'grid';
   }
 
-  // ========== 自动锁定时间 ==========
-  static Future<void> setAutoLockMinutes(int minutes) async {
-    await _ensureInitialized();
-    await _prefs!.setInt(AppConstants.keyAutoLockMinutes, minutes);
-  }
-
-  static Future<int> getAutoLockMinutes() async {
-    await _ensureInitialized();
-    return _prefs!.getInt(AppConstants.keyAutoLockMinutes) ?? 1;
-  }
-
   // ========== 手势图案是否已设置 ==========
   static Future<void> setHasGesture(bool has) async {
     await _ensureInitialized();
@@ -72,5 +60,4 @@ class SharedPrefs {
     await _ensureInitialized();
     return _prefs!.getBool(AppConstants.keyHasGesture) ?? false;
   }
-
 }

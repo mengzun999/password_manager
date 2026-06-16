@@ -23,6 +23,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// 设置页面
 class SettingsPage extends ConsumerStatefulWidget {
@@ -50,6 +51,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   // ========== 主密码修改 ==========
 
   Future<void> _changeMasterPassword() async {
+
+
     final currentPassword = await _showPasswordDialog('验证身份', '请输入当前主密码');
     if (currentPassword == null || currentPassword.isEmpty) return;
 
@@ -197,6 +200,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   // ========== 手势图案 ==========
 
   Future<void> _changeGesture() async {
+
+
     final hasGesture = await SharedPrefs.hasGesture();
     bool verified = false;
 
@@ -232,6 +237,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           height: 250,
           child: GesturePatternView(
             onPatternComplete: (pattern) async {
+
+
               final isValid = await _verifyGesturePattern(pattern);
               if (mounted) {
                 Navigator.pop(context);
@@ -269,7 +276,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     try {
       final backupPath = await BackupService.exportBackup(masterKey);
       if (backupPath != null && mounted) {
-        _showSnackBar('备份已导出: $backupPath');
+        // ✅ 导出成功后，调用系统分享
+        final file = File(backupPath);
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: '密码管理器备份文件，请妥善保管',
+        );
+        _showSnackBar('备份已导出');
       } else {
         _showSnackBar('导出失败');
       }
@@ -281,6 +294,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _importBackup() async {
+
+
     final masterKey = ref.read(authProvider).masterKey;
     if (masterKey == null) {
       _showSnackBar('请先解锁应用');
@@ -355,10 +370,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         await SecureStorage.clearAll();
         ref.read(authProvider.notifier).resetAllData();
         if (mounted) {
+          // ✅ 改为跳转到 setup（设置主密码页面）
           Navigator.pushNamedAndRemoveUntil(
             context,
-            AppRoutes.splash,
-            (route) => false,
+            AppRoutes.setup,
+                (route) => false,
           );
         }
       } catch (e) {
@@ -367,6 +383,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       }
     }
   }
+
 
   // ========== 辅助方法 ==========
 
@@ -483,6 +500,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         children: [Text(currentLabel), const Icon(Icons.arrow_drop_down)],
       ),
       onTap: () {
+
+
         showModalBottomSheet(
           context: context,
           builder: (context) => Column(
@@ -495,6 +514,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       ? const Icon(Icons.check)
                       : null,
                   onTap: () {
+
                     Navigator.pop(context);
                     onChanged(options[i]);
                   },
@@ -523,7 +543,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           );
         }
 
-        // 跳转到生物识别设置页面
         return ListTile(
           leading: const Icon(Icons.fingerprint),
           title: const Text('生物识别解锁'),
@@ -537,6 +556,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ],
           ),
           onTap: () {
+
+
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const BiometricSetupPage()),
@@ -574,16 +595,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             onTap: _changeGesture,
           ),
           _buildBiometricSection(settings),
-          _buildDropdownItem(
-            icon: Icons.timer,
-            title: '自动锁定',
-            subtitle: '不操作后自动锁定时间',
-            value: settings.autoLockMinutes,
-            options: AppConstants.autoLockOptions,
-            optionLabels: const ['立即', '1分钟', '5分钟', '15分钟', '30分钟'],
-            onChanged: (value) =>
-                ref.read(settingsProvider.notifier).setAutoLockMinutes(value),
-          ),
           const Divider(),
           _buildSectionHeader('数据'),
           _buildMenuItem(
@@ -612,8 +623,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             title: '深色模式',
             subtitle: '开启后使用深色主题',
             value: settings.isDarkMode,
-            onChanged: (value) =>
-                ref.read(settingsProvider.notifier).toggleDarkMode(value),
+            onChanged: (value) {
+              // ✅ 用户切换时更新活动时间
+              ref.read(settingsProvider.notifier).toggleDarkMode(value);
+            },
           ),
           const SizedBox(height: 80),
         ],

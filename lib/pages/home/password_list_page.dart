@@ -8,9 +8,6 @@ import 'package:password_manager/providers/password_provider.dart';
 import 'package:password_manager/utils/helpers.dart';
 
 /// 密码列表主页
-///
-/// 显示所有保存的密码条目，支持搜索、添加、编辑、删除
-/// 使用 password_provider 管理状态
 class PasswordListPage extends ConsumerStatefulWidget {
   const PasswordListPage({super.key});
 
@@ -19,34 +16,30 @@ class PasswordListPage extends ConsumerStatefulWidget {
 }
 
 class _PasswordListPageState extends ConsumerState<PasswordListPage> {
-  // ========== 生命周期方法 ==========
-
   @override
   void initState() {
     super.initState();
-    // 在下一帧加载数据，确保页面已构建完成
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadEntries();
     });
   }
 
-  // ========== 数据操作方法 ==========
-
   /// 加载密码列表
   Future<void> _loadEntries() async {
+    // ✅ 用户执行操作，更新活动时间（防止自动锁定）
     await ref.read(passwordProvider.notifier).loadEntries();
   }
 
   /// 刷新列表（下拉刷新时调用）
   Future<void> _refresh() async {
+    // ✅ 用户执行操作，更新活动时间
     await _loadEntries();
   }
 
   /// 删除密码条目
-  /// [id] 要删除的条目唯一标识
-  /// [title] 条目标题（用于确认对话框显示）
   Future<void> _deleteEntry(String id, String title) async {
-    // 弹出确认对话框
+    // ✅ 用户执行操作，更新活动时间
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -67,10 +60,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
     );
 
     if (confirmed == true) {
-      // 调用 provider 删除
       await ref.read(passwordProvider.notifier).deleteEntry(id);
-
-      // 显示删除成功的提示
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('已删除')),
@@ -80,8 +70,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
   }
 
   /// 复制文本到系统剪贴板
-  /// [text] 要复制的文本内容
-  /// [label] 文本类型标签（如"用户名"），用于显示提示
   Future<void> _copyToClipboard(String text, String label) async {
     await Helpers.copyToClipboard(text);
     if (mounted) {
@@ -92,11 +80,10 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
   }
 
   /// 复制密码（需要先解密）
-  /// [entry] 密码条目
   Future<void> _copyPassword(PasswordEntry entry) async {
-    // 1. 获取主密钥
-    final masterKey = ref.read(masterKeyProvider);
 
+
+    final masterKey = ref.read(masterKeyProvider);
     if (masterKey == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('未解锁，请重新登录')),
@@ -104,7 +91,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
       return;
     }
 
-    // 2. 检查是否有加密的密码
     if (entry.encryptedPassword == null || entry.encryptedPassword!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('没有保存密码')),
@@ -113,9 +99,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
     }
 
     try {
-      // 3. 使用 PasswordHelper 解密密码
       final decrypted = await PasswordHelper.decryptPassword(entry, masterKey);
-
       if (decrypted == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('解密失败')),
@@ -123,9 +107,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
         return;
       }
 
-      // 4. 复制到剪贴板
       await Helpers.copyToClipboard(decrypted);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('已复制密码')),
@@ -140,34 +122,28 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
     }
   }
 
-  // ========== 界面构建方法 ==========
-
   @override
   Widget build(BuildContext context) {
-    // 监听密码状态
     final passwordState = ref.watch(passwordProvider);
     final masterKey = ref.watch(masterKeyProvider);
 
-    // 从状态中获取数据
     final isLoading = passwordState.isLoading;
     final filteredEntries = passwordState.filteredEntries;
     final searchKeyword = passwordState.searchKeyword;
 
     return Scaffold(
-      // ========== 顶部导航栏 ==========
       appBar: AppBar(
         title: const Text('密码管家'),
         centerTitle: false,
         actions: [
-          // 设置按钮
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
+              // ✅ 用户执行操作，更新活动时间
               Navigator.pushNamed(context, AppRoutes.settings);
             },
           ),
         ],
-        // 底部搜索栏
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
@@ -176,12 +152,11 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
               decoration: InputDecoration(
                 hintText: '搜索标题、用户名或备注...',
                 prefixIcon: const Icon(Icons.search),
-                // 有关键词时显示清除按钮
                 suffixIcon: searchKeyword.isNotEmpty
                     ? IconButton(
                   icon: const Icon(Icons.clear),
                   onPressed: () {
-                    // 调用 provider 清空搜索
+                    // ✅ 用户执行操作，更新活动时间
                     ref.read(passwordProvider.notifier).clearSearch();
                   },
                 )
@@ -195,7 +170,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                     : Colors.grey[800],
                 contentPadding: const EdgeInsets.symmetric(vertical: 0),
               ),
-              // 用户输入时实时搜索
               onChanged: (value) {
                 ref.read(passwordProvider.notifier).search(value);
               },
@@ -204,14 +178,10 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
         ),
       ),
 
-      // ========== 主体内容 ==========
       body: isLoading
-      // 加载中：显示转圈动画
           ? const Center(child: CircularProgressIndicator())
           : filteredEntries.isEmpty
-      // 无数据：显示空状态页面
           ? _buildEmptyState()
-      // 有数据：显示密码列表（支持下拉刷新）
           : RefreshIndicator(
         onRefresh: _refresh,
         child: ListView.builder(
@@ -223,18 +193,15 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
         ),
       ),
 
-      // ========== 底部添加按钮区域 ==========
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Row(
             children: [
-              // 按钮1：从应用列表添加
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pushNamed(context, AppRoutes.appList).then((_) {
-                      // 从应用列表返回后刷新
                       _loadEntries();
                     });
                   },
@@ -246,13 +213,11 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                 ),
               ),
               const SizedBox(width: 12),
-
-              // 按钮2：手动添加
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () {
+                    // ✅ 用户执行操作，更新活动时间
                     Navigator.pushNamed(context, AppRoutes.addEdit).then((_) {
-                      // 从添加页面返回后刷新
                       _loadEntries();
                     });
                   },
@@ -270,9 +235,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
     );
   }
 
-  // ========== 子组件 ==========
-
-  /// 空状态页面（没有密码时显示）
+  /// 空状态页面
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -305,13 +268,10 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
   }
 
   /// 单个密码条目卡片
-  /// [entry] 要显示的密码条目对象
-  /// [masterKey] 主密钥（用于复制密码时解密）
   Widget _buildEntryCard(PasswordEntry entry, Uint8List? masterKey) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: InkWell(
-        // 单击：跳转到详情页
         onTap: () {
           Navigator.pushNamed(
             context,
@@ -319,7 +279,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
             arguments: entry.id,
           );
         },
-        // 长按：显示操作菜单
         onLongPress: () {
           _showBottomSheet(entry, masterKey);
         },
@@ -328,7 +287,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              // ========== 左侧图标 ==========
               Container(
                 width: 48,
                 height: 48,
@@ -342,13 +300,10 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                 ),
               ),
               const SizedBox(width: 12),
-
-              // ========== 中间内容（标题、用户名、时间） ==========
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 标题
                     Text(
                       entry.title,
                       style: const TextStyle(
@@ -359,8 +314,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-
-                    // 用户名（如果有才显示）
                     if (entry.username != null && entry.username!.isNotEmpty)
                       Text(
                         entry.username!,
@@ -371,8 +324,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-
-                    // 最后更新时间
                     Text(
                       Helpers.formatDate(entry.updatedAt),
                       style: TextStyle(
@@ -383,20 +334,15 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                   ],
                 ),
               ),
-
-              // ========== 右侧操作按钮 ==========
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 复制用户名按钮
                   if (entry.username != null && entry.username!.isNotEmpty)
                     IconButton(
                       icon: const Icon(Icons.person_outline, size: 20),
                       onPressed: () => _copyToClipboard(entry.username!, '用户名'),
                       tooltip: '复制用户名',
                     ),
-
-                  // 复制密码按钮
                   IconButton(
                     icon: const Icon(Icons.copy, size: 20),
                     onPressed: () {
@@ -413,9 +359,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
     );
   }
 
-  /// 显示底部操作菜单（长按卡片时触发）
-  /// [entry] 当前操作的密码条目
-  /// [masterKey] 主密钥
+  /// 显示底部操作菜单
   void _showBottomSheet(PasswordEntry entry, Uint8List? masterKey) {
     showModalBottomSheet(
       context: context,
@@ -423,23 +367,20 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 菜单项1：编辑
             ListTile(
               leading: const Icon(Icons.edit),
               title: const Text('编辑'),
               onTap: () {
-                Navigator.pop(context); // 关闭菜单
+                Navigator.pop(context);
                 Navigator.pushNamed(
                   context,
                   AppRoutes.addEdit,
                   arguments: entry,
                 ).then((_) {
-                  _loadEntries(); // 返回后刷新
+                  _loadEntries();
                 });
               },
             ),
-
-            // 菜单项2：复制用户名
             if (entry.username != null && entry.username!.isNotEmpty)
               ListTile(
                 leading: const Icon(Icons.copy),
@@ -449,8 +390,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                   _copyToClipboard(entry.username!, '用户名');
                 },
               ),
-
-            // 菜单项3：复制密码
             ListTile(
               leading: const Icon(Icons.copy),
               title: const Text('复制密码'),
@@ -459,8 +398,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                 _copyPassword(entry);
               },
             ),
-
-            // 菜单项4：删除
             ListTile(
               leading: const Icon(Icons.delete),
               title: const Text('删除'),

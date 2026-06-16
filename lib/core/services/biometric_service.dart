@@ -9,8 +9,9 @@ class BiometricService {
   /// 检查设备是否支持生物识别
   static Future<bool> isAvailable() async {
     try {
-      final isAvailable = await _localAuth.canCheckBiometrics;
-      return isAvailable;
+      final canCheck = await _localAuth.canCheckBiometrics;
+      final isSupported = await _localAuth.isDeviceSupported();
+      return canCheck || isSupported;
     } catch (e) {
       return false;
     }
@@ -26,15 +27,34 @@ class BiometricService {
     }
   }
 
-  /// 进行生物识别验证（最简兼容版，无任何报错）
+  /// 检查是否支持指纹（兼容新旧 Android）
+  static Future<bool> hasFingerprint() async {
+    try {
+      final types = await getAvailableTypes();
+
+      // Android 10+ 返回 strong（指纹），旧版返回 fingerprint
+      if (types.contains(BiometricType.fingerprint)) return true;
+      if (types.contains(BiometricType.strong)) return true;
+
+      // 兜底：检查硬件支持
+      return await isAvailable();
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// 进行生物识别验证
   static Future<bool> authenticate({required String reason}) async {
     try {
-      // 🔥 最简写法：只保留必选参数，彻底无报错
+      // ✅ 只使用 currentVersion 支持的参数
       final isAuthenticated = await _localAuth.authenticate(
         localizedReason: reason,
+        biometricOnly: true,  // 3.0.1 支持
+        // stickyAuth 在 4.0.0 才支持，移除
       );
       return isAuthenticated;
     } catch (e) {
+      print('Authentication error: $e');
       return false;
     }
   }
@@ -49,13 +69,15 @@ class BiometricService {
       case BiometricType.iris:
         return '虹膜识别';
       case BiometricType.strong:
-        return '强生物识别';
+        return '指纹识别';
+      case BiometricType.weak:
+        return '人脸识别';
       default:
         return '生物识别';
     }
   }
 
-  /// 获取生物识别图标（已修复无 Icons.biometric 报错）
+  /// 获取生物识别类型图标
   static IconData getTypeIcon(BiometricType type) {
     switch (type) {
       case BiometricType.face:
@@ -65,7 +87,9 @@ class BiometricService {
       case BiometricType.iris:
         return Icons.visibility;
       case BiometricType.strong:
-        return Icons.security;
+        return Icons.fingerprint;
+      case BiometricType.weak:
+        return Icons.face;
       default:
         return Icons.security;
     }

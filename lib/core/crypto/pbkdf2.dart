@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:password_manager/constants/app_constants.dart';
 import 'package:pointycastle/export.dart';
 
@@ -22,6 +23,14 @@ class PBKDF2Helper {
 
     return key;
   }
+  // ✅ 新增：用于 isolate 的包装方法
+  static Future<Uint8List> deriveKeyIsolate(String password, Uint8List salt) {
+    return compute(_deriveKeyInIsolate, _DeriveKeyParams(password, salt));
+  }
+  // 必须是顶层函数或静态方法，不能是闭包
+  static Uint8List _deriveKeyInIsolate(_DeriveKeyParams params) {
+    return deriveKey(params.password, params.salt);
+  }
 
   // 生成密码的哈希值（用于存储和验证）
   static String hashPassword(String password, Uint8List salt) {
@@ -38,4 +47,11 @@ class PBKDF2Helper {
     final hash = hashPassword(password, salt);
     return hash == storedHash;
   }
+}
+// ✅ 新增：参数传递类（必须可序列化）
+class _DeriveKeyParams {
+  final String password;
+  final Uint8List salt;
+
+  _DeriveKeyParams(this.password, this.salt);
 }

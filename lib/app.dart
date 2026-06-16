@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:password_manager/constants/app_constants.dart';
 import 'package:password_manager/providers/settings_provider.dart';
 import 'core/models/password_entry.dart';
-import 'pages/splash_page.dart';
 import 'pages/unlock/unlock_page.dart';
 import 'pages/setup/setup_master_password_page.dart';
 import 'pages/home/password_list_page.dart';
@@ -15,10 +14,7 @@ import 'pages/home/password_detail_page.dart';
 import 'pages/settings/settings_page.dart';
 import 'pages/app_list_page.dart';
 
-/// 路由名称常量
-/// 统一管理页面跳转用的名字，避免写错
 class AppRoutes {
-  static const String splash = '/';
   static const String setup = '/setup';
   static const String setupMnemonic = '/setup/mnemonic';
   static const String setupGesture = '/setup/gesture';
@@ -31,32 +27,31 @@ class AppRoutes {
   static const String settings = '/settings';
 }
 
-class MyApp extends ConsumerWidget {  // 改为 ConsumerWidget
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // 监听设置状态，当主题改变时自动重建
+  ConsumerState<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends ConsumerState<MyApp> {
+  @override
+  Widget build(BuildContext context) {
     final settingsState = ref.watch(settingsProvider);
 
     return MaterialApp(
       title: AppConstants.appName,
-      theme: ThemeData.light(),      // 亮色主题
-      darkTheme: ThemeData.dark(),   // 暗色主题
-      themeMode: settingsState.themeMode,  // 从 provider 读取主题模式
-      initialRoute: AppRoutes.splash,
+      theme: ThemeData.light(),
+      darkTheme: ThemeData.dark(),
+      themeMode: settingsState.themeMode,
+      initialRoute: AppRoutes.unlock,
       onGenerateRoute: _generateRoute,
       debugShowCheckedModeBanner: false,
     );
   }
 
-  /// 路由生成器
-  /// 根据路由名称返回对应的页面
   Route<dynamic> _generateRoute(RouteSettings settings) {
     switch (settings.name) {
-      case AppRoutes.splash:
-        return MaterialPageRoute(builder: (_) => const SplashPage());
-
       case AppRoutes.setup:
         return MaterialPageRoute(builder: (_) => const SetupMasterPasswordPage());
 

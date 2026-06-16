@@ -26,8 +26,6 @@ class AppConstants {
   // 助记词
   static const int mnemonicWordCount = 24;
 
-  // 自动锁定选项（分钟）
-  static const List<int> autoLockOptions = [0, 1, 5, 15, 30];
 
   // 图片相关
   static const int maxImageCountPerEntry = 20; // 每条密码最多能添加多少张图片
@@ -48,16 +46,9 @@ class AppConstants {
   // 生物识别开关（true=启用指纹/人脸解锁）
   static const String keyBiometricEnabled = 'biometric_enabled';
 
-  // 自动锁定时间（存储用户选择的分钟数）
-  static const String keyAutoLockMinutes = 'auto_lock_minutes';
 
   // 是否设置过手势图案
   static const String keyHasGesture = 'has_gesture';
-
-  // ========== 管理员密码（硬编码）==========
-  // 你自己定一个记得住但不容易猜的密码
-  // 在解锁页快速按音量减键3次后输入这个密码，可以直接重置主密码
-  static const String adminPassword = 'MyAdminReset2024';
 
   // ========== flutter_secure_storage 键名 ==========
   // Salt（密钥派生用的随机数）
@@ -83,6 +74,4 @@ class AppConstants {
   static const String keyEncryptedMasterKeyForBiometric =
       'encrypted_master_key_for_biometric';
 
-  // 生物识别密钥列表
-  static const String keyBiometricKeysList = 'biometric_keys_list';
 }
