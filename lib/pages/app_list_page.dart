@@ -1,12 +1,10 @@
 import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/services/app_list_service.dart';
 import '../providers/settings_provider.dart';
 import '../app.dart';
 
-/// 应用列表页面
 class AppListPage extends ConsumerStatefulWidget {
   const AppListPage({super.key});
 
@@ -16,20 +14,20 @@ class AppListPage extends ConsumerStatefulWidget {
 
 class _AppListPageState extends ConsumerState<AppListPage> {
   String _searchKeyword = '';
-  List<AppInfo> _apps = [];
+  List<AppInfo> _displayApps = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
   String? _error;
-
-  /// true = 用户应用，false = 系统应用
   bool _showUserApps = true;
+  bool _allLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    _loadApps();
+    // ✅ 使用 Future.microtask 让 UI 先渲染
+    Future.microtask(() => _loadApps());
   }
 
-  /// 加载已安装应用
   Future<void> _loadApps() async {
     setState(() {
       _isLoading = true;
@@ -37,9 +35,10 @@ class _AppListPageState extends ConsumerState<AppListPage> {
     });
 
     try {
-      final apps = await AppListService.getInstalledApps();
+      // ✅ 后台获取，UI 会显示加载状态
+      final apps = await AppListService.getInstalledApps(initialCount: 30);
       setState(() {
-        _apps = apps;
+        _displayApps = apps;
         _isLoading = false;
       });
     } catch (e) {
@@ -50,7 +49,36 @@ class _AppListPageState extends ConsumerState<AppListPage> {
     }
   }
 
-  /// 判断是否为系统应用
+  /// 加载更多
+  void _loadMore() {
+    if (_isLoadingMore || _allLoaded) return;
+
+    final allApps = AppListService.getAllApps();
+    if (_displayApps.length >= allApps.length) {
+      setState(() => _allLoaded = true);
+      return;
+    }
+
+    setState(() => _isLoadingMore = true);
+
+    final nextBatch = allApps.sublist(
+      _displayApps.length,
+      (_displayApps.length + 20).clamp(0, allApps.length),
+    );
+
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) {
+        setState(() {
+          _displayApps.addAll(nextBatch);
+          _isLoadingMore = false;
+          if (_displayApps.length >= allApps.length) {
+            _allLoaded = true;
+          }
+        });
+      }
+    });
+  }
+
   bool _isSystemApp(String packageName) {
     final systemPrefixes = [
       'android',
@@ -68,17 +96,14 @@ class _AppListPageState extends ConsumerState<AppListPage> {
     return systemPrefixes.any(packageName.startsWith);
   }
 
-  /// 获取过滤后的应用列表
   List<AppInfo> get _filteredApps {
-    // 先按系统/用户过滤
     List<AppInfo> filtered;
     if (_showUserApps) {
-      filtered = _apps.where((app) => !_isSystemApp(app.packageName)).toList();
+      filtered = _displayApps.where((app) => !_isSystemApp(app.packageName)).toList();
     } else {
-      filtered = _apps.where((app) => _isSystemApp(app.packageName)).toList();
+      filtered = _displayApps.where((app) => _isSystemApp(app.packageName)).toList();
     }
 
-    // 再按关键词搜索
     if (_searchKeyword.isEmpty) {
       return filtered;
     }
@@ -90,7 +115,6 @@ class _AppListPageState extends ConsumerState<AppListPage> {
     }).toList();
   }
 
-  /// 切换视图模式
   Future<void> _toggleViewMode() async {
     final settings = ref.read(settingsProvider);
     final newMode = settings.appListViewMode == 'grid' ? 'list' : 'grid';
@@ -117,7 +141,6 @@ class _AppListPageState extends ConsumerState<AppListPage> {
           preferredSize: const Size.fromHeight(110),
           child: Column(
             children: [
-              // 搜索框
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
                 child: TextField(
@@ -150,7 +173,6 @@ class _AppListPageState extends ConsumerState<AppListPage> {
                   },
                 ),
               ),
-              // ✅ 切换按钮：点击切换 用户应用/系统应用
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
                 child: GestureDetector(
@@ -186,7 +208,7 @@ class _AppListPageState extends ConsumerState<AppListPage> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
           ? _buildErrorState()
-          : _apps.isEmpty
+          : _displayApps.isEmpty
           ? _buildEmptyState()
           : _filteredApps.isEmpty
           ? _buildNoResultState()
@@ -196,7 +218,6 @@ class _AppListPageState extends ConsumerState<AppListPage> {
     );
   }
 
-  /// 错误状态
   Widget _buildErrorState() {
     return Center(
       child: Padding(
@@ -235,7 +256,6 @@ class _AppListPageState extends ConsumerState<AppListPage> {
     );
   }
 
-  /// 空状态页面
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -269,7 +289,6 @@ class _AppListPageState extends ConsumerState<AppListPage> {
     );
   }
 
-  /// 无搜索结果状态
   Widget _buildNoResultState() {
     final typeName = _showUserApps ? '用户应用' : '系统应用';
     return Center(
@@ -302,7 +321,6 @@ class _AppListPageState extends ConsumerState<AppListPage> {
     );
   }
 
-  /// 网格视图
   Widget _buildGridView() {
     final filteredApps = _filteredApps;
 
@@ -312,31 +330,53 @@ class _AppListPageState extends ConsumerState<AppListPage> {
         crossAxisCount: 3,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        childAspectRatio: 0.8,  // ✅ 稍微调整，让卡片更高一点
+        childAspectRatio: 0.8,
       ),
-      itemCount: filteredApps.length,
+      itemCount: filteredApps.length + (_isLoadingMore ? 1 : 0),
       itemBuilder: (context, index) {
+        if (index >= filteredApps.length) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16.0),
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
         final app = filteredApps[index];
         return _buildAppItem(app);
       },
     );
   }
 
-  /// 列表视图
   Widget _buildListView() {
     final filteredApps = _filteredApps;
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: filteredApps.length,
-      itemBuilder: (context, index) {
-        final app = filteredApps[index];
-        return _buildAppItem(app);
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification.metrics.pixels >= notification.metrics.maxScrollExtent - 200) {
+          _loadMore();
+        }
+        return false;
       },
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: filteredApps.length + (_isLoadingMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index >= filteredApps.length) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          }
+          final app = filteredApps[index];
+          return _buildAppItem(app);
+        },
+      ),
     );
   }
 
-  /// 单个应用项
   Widget _buildAppItem(AppInfo app) {
     final settings = ref.watch(settingsProvider);
     final isGrid = settings.appListViewMode == 'grid';
@@ -365,7 +405,6 @@ class _AppListPageState extends ConsumerState<AppListPage> {
     );
   }
 
-  /// 网格视图的内容
   Widget _buildGridItemContent(AppInfo app) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -380,9 +419,16 @@ class _AppListPageState extends ConsumerState<AppListPage> {
               color: Colors.grey.shade100,
             ),
             child: FutureBuilder<Uint8List?>(
-              future: AppListService.getCachedAppIcon(app.packageName),
+              future: AppListService.loadAppIcon(app.packageName),
               builder: (context, snapshot) {
                 final iconBytes = snapshot.data;
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Icon(
+                    Icons.apps,
+                    color: Colors.grey.shade400,
+                    size: 32,
+                  );
+                }
                 if (iconBytes != null) {
                   return ClipRRect(
                     borderRadius: BorderRadius.circular(12),
@@ -406,7 +452,6 @@ class _AppListPageState extends ConsumerState<AppListPage> {
             ),
           ),
           const SizedBox(height: 6),
-          // ✅ 用 Expanded 让文字填充剩余空间，不会溢出
           Expanded(
             child: Text(
               app.appName,
@@ -424,8 +469,6 @@ class _AppListPageState extends ConsumerState<AppListPage> {
     );
   }
 
-
-  /// 列表视图的内容
   Widget _buildListItemContent(AppInfo app) {
     return Row(
       children: [
@@ -437,9 +480,16 @@ class _AppListPageState extends ConsumerState<AppListPage> {
             color: Colors.grey.shade100,
           ),
           child: FutureBuilder<Uint8List?>(
-            future: AppListService.getCachedAppIcon(app.packageName),
+            future: AppListService.loadAppIcon(app.packageName),
             builder: (context, snapshot) {
               final iconBytes = snapshot.data;
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Icon(
+                  Icons.apps,
+                  color: Colors.grey.shade400,
+                  size: 24,
+                );
+              }
               if (iconBytes != null) {
                 return ClipRRect(
                   borderRadius: BorderRadius.circular(8),

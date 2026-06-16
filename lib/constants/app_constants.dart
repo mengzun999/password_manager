@@ -74,4 +74,7 @@ class AppConstants {
   static const String keyEncryptedMasterKeyForBiometric =
       'encrypted_master_key_for_biometric';
 
+  // 加密存储的 masterKey（用于恢复密钥）
+  static const String keyEncryptedMasterKeyForRecovery =
+      'encrypted_master_key_for_recovery';
 }

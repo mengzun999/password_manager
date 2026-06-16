@@ -10,19 +10,10 @@ import 'package:password_manager/core/services/biometric_service.dart';
 import 'package:password_manager/core/storage/shared_prefs.dart';
 import 'package:password_manager/core/storage/secure_storage.dart';
 import 'package:password_manager/constants/app_constants.dart';
+import 'package:password_manager/utils/toast_utils.dart';
 import 'package:password_manager/widgets/gesture_pattern_view.dart';
 
 /// 解锁页面
-///
-/// 用户每次打开 App 时看到的页面
-/// 支持三种解锁方式：
-/// 1. 生物识别（指纹/人脸）- 优先弹出，成功后直接解锁
-/// 2. 手势图案 - 验证成功后直接解锁
-/// 3. 主密码 - 最终 fallback 方式
-///
-/// 设计原理：
-/// - 首次设置时，将 masterKey 用手势哈希/生物识别密钥加密后存储
-/// - 解锁时，验证通过后解密获取 masterKey，直接解锁
 class UnlockPage extends ConsumerStatefulWidget {
   const UnlockPage({super.key});
 
@@ -33,36 +24,22 @@ class UnlockPage extends ConsumerStatefulWidget {
 class _UnlockPageState extends ConsumerState<UnlockPage> {
   // ========== 控制器 ==========
 
-  /// 主密码输入框控制器
   final _passwordController = TextEditingController();
 
-  /// 手势画板的 Key，用于调用 clearPattern 方法
   final GlobalKey<GesturePatternViewState> _gestureKey = GlobalKey();
 
   // ========== UI 状态变量 ==========
 
-  /// 当前解锁模式
-  /// 0 = 主密码输入模式
-  /// 1 = 手势图案模式
   int _unlockMode = 0;
-
-  /// 密码是否隐藏（true=显示为黑点，false=显示明文）
   bool _obscurePassword = true;
-
-  /// 错误提示文字
   String? _error;
-
-  /// 是否正在验证中（显示加载动画，防止重复提交）
   bool _isLoading = false;
-
-  /// 是否已启用手势解锁（从 SharedPreferences 读取）
   bool _hasGesture = false;
-
-  /// 当前手势图案选中的点（用于显示）
   List<int> _currentPattern = [];
-
-  /// 是否正在检查初始化状态
   bool _isChecking = true;
+
+  /// ✅ 是否显示"忘记密码"按钮（密码验证失败后显示）
+  bool _showForgotPassword = false;
 
   // ========== 生命周期方法 ==========
 
@@ -80,11 +57,9 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
   // ========== 初始化检查 ==========
 
-  /// 检查是否已完成首次设置，未完成则跳转到设置页
   Future<void> _checkAndNavigate() async {
     setState(() => _isChecking = true);
 
-    // 检查是否已初始化（是否有 salt 和主密码哈希）
     final hasSalt = await SecureStorage.containsKey(AppConstants.keySalt);
     final hasMasterHash = await SecureStorage.containsKey(
       AppConstants.keyMasterPasswordHash,
@@ -92,14 +67,12 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     final isInitialized = hasSalt && hasMasterHash;
 
     if (!isInitialized) {
-      // 未初始化，跳转到设置页
       if (mounted) {
         Navigator.pushReplacementNamed(context, AppRoutes.setup);
       }
       return;
     }
 
-    // 已初始化，加载设置并尝试生物识别
     setState(() => _isChecking = false);
     await _loadSettings();
     _tryBiometricUnlock();
@@ -107,7 +80,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
   // ========== 设置加载方法 ==========
 
-  /// 加载设置（检查是否启用手势）
   Future<void> _loadSettings() async {
     final hasGesture = await SharedPrefs.hasGesture();
     setState(() {
@@ -115,44 +87,30 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     });
   }
 
-  // ========== 生物识别解锁（直接解锁） ==========
+  // ========== 生物识别解锁 ==========
 
-  /// 尝试生物识别解锁
-  ///
-  /// 流程：
-  /// 1. 检查用户是否开启了生物识别开关
-  /// 2. 延迟 300ms 让页面显示出来
-  /// 3. 弹出系统生物识别验证对话框
-  /// 4. 验证成功后，解密获取 masterKey 并直接解锁
   Future<void> _tryBiometricUnlock() async {
-    // 1. 检查是否开启生物识别
     final isEnabled = await SharedPrefs.isBiometricEnabled();
     if (!isEnabled) return;
 
-    // 2. 延迟一下让页面显示出来
     await Future.delayed(const Duration(milliseconds: 300));
 
-    // 3. 弹出生物识别验证
     final isAuthenticated = await BiometricService.authenticate(
       reason: '验证身份以解锁应用',
     );
 
     if (!isAuthenticated || !mounted) return;
 
-    // 4. 生物识别成功，获取加密的 masterKey 并解密
     final biometricKeyBase64 = await SecureStorage.read(AppConstants.keyBiometricKeyId);
     final encryptedMasterKeyBase64 = await SecureStorage.read(
       AppConstants.keyEncryptedMasterKeyForBiometric,
     );
 
     if (biometricKeyBase64 == null || encryptedMasterKeyBase64 == null) {
-      // 没有存储加密的 masterKey，切换到密码模式
       setState(() {
         _unlockMode = 0;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先输入主密码完成解锁')),
-      );
+      ToastUtils.showInfo(context, '请先输入主密码完成解锁');
       return;
     }
 
@@ -161,12 +119,10 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     });
 
     try {
-      // ✅ 解密 masterKey：biometricKeyBase64 是 Base64 编码的 32 字节密钥
       final biometricKey = base64Decode(biometricKeyBase64);
       final encryptedMasterKey = base64Decode(encryptedMasterKeyBase64);
       final masterKey = await AESGCMHelper.decryptBytes(encryptedMasterKey, biometricKey);
 
-      // 解锁成功
       final authNotifier = ref.read(authProvider.notifier);
       authNotifier.unlock(masterKey: masterKey);
 
@@ -181,31 +137,18 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         _isLoading = false;
         _unlockMode = 0;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('解锁失败，请使用主密码')),
-      );
+      ToastUtils.showError(context, '解锁失败，请使用主密码');
     }
   }
 
-  // ========== 手势解锁（直接解锁） ==========
+  // ========== 手势解锁 ==========
 
-  /// 验证手势图案并直接解锁
-  ///
-  /// 流程：
-  /// 1. 检查图案长度（至少4个点）
-  /// 2. 从 SecureStorage 读取存储的手势哈希和加密的 masterKey
-  /// 3. 计算当前图案的 SHA-256 哈希
-  /// 4. 比较两个哈希值是否一致
-  /// 5. 一致则解密 masterKey 并直接解锁
-  /// 6. 不一致则清空画板，让用户重新绘制
   Future<void> _verifyGestureAndUnlock(List<int> pattern) async {
-    // 1. 检查长度：至少连接4个点
     if (pattern.length < 4) {
       setState(() {
         _error = '至少连接4个点';
         _currentPattern = [];
       });
-      // 清空画板
       _gestureKey.currentState?.clearPattern();
       return;
     }
@@ -215,7 +158,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       _error = null;
     });
 
-    // 2. 获取存储的手势哈希和加密的 masterKey
     final storedGestureHash = await SecureStorage.read(AppConstants.keyGestureHash);
     final encryptedMasterKeyBase64 = await SecureStorage.read(
       AppConstants.keyEncryptedMasterKeyForGesture,
@@ -227,35 +169,28 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         _isLoading = false;
         _currentPattern = [];
       });
-      // 清空画板
       _gestureKey.currentState?.clearPattern();
       return;
     }
 
-    // 3. 计算当前图案的哈希
     final patternString = pattern.join(',');
     final currentHash = sha256.convert(utf8.encode(patternString)).toString();
 
-    // 4. 验证手势是否正确
     if (currentHash != storedGestureHash) {
       setState(() {
         _error = '手势图案错误';
         _isLoading = false;
         _currentPattern = [];
       });
-      // 清空画板，让用户重新绘制
       _gestureKey.currentState?.clearPattern();
       return;
     }
 
-    // 5. 手势正确，解密 masterKey
     try {
-      // 使用手势哈希的前32字节作为解密密钥
       final gestureKey = Uint8List.fromList(utf8.encode(storedGestureHash.substring(0, 32)));
       final encryptedMasterKey = base64Decode(encryptedMasterKeyBase64);
       final masterKey = await AESGCMHelper.decryptBytes(encryptedMasterKey, gestureKey);
 
-      // 6. 解锁成功
       final authNotifier = ref.read(authProvider.notifier);
       authNotifier.unlock(masterKey: masterKey);
 
@@ -271,21 +206,12 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         _isLoading = false;
         _currentPattern = [];
       });
-      // 清空画板
       _gestureKey.currentState?.clearPattern();
     }
   }
 
   // ========== 主密码解锁 ==========
 
-  /// 处理主密码解锁
-  ///
-  /// 流程：
-  /// 1. 获取用户输入的密码
-  /// 2. 验证密码不为空
-  /// 3. 调用 AuthProvider 验证密码并获取主密钥
-  /// 4. 验证成功则解锁并跳转到主页
-  /// 5. 验证失败则显示错误并清空输入框
   Future<void> _handleUnlock() async {
     final password = _passwordController.text.trim();
 
@@ -294,9 +220,11 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       return;
     }
 
+    // ✅ 每次输入时隐藏忘记密码按钮
     setState(() {
       _error = null;
       _isLoading = true;
+      _showForgotPassword = false;
     });
 
     final authNotifier = ref.read(authProvider.notifier);
@@ -313,32 +241,208 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         );
       }
     } else {
+      // ✅ 验证失败，显示错误并显示"忘记密码"按钮
       setState(() {
         _error = '主密码错误';
         _passwordController.clear();
+        _showForgotPassword = true;
       });
     }
   }
 
+  // ========== ✅ 恢复密钥解锁 ==========
+
+  /// 显示恢复密钥输入对话框
+  void _showRecoveryDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => AlertDialog(
+        title: const Text('使用恢复密钥'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '输入128位恢复密钥解锁应用',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                hintText: '输入恢复密钥...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => _unlockWithRecoveryKey(controller.text),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.orange,
+            ),
+            child: const Text('解锁'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 使用恢复密钥解锁
+  Future<void> _unlockWithRecoveryKey(String inputKey) async {
+    if (inputKey.trim().isEmpty) {
+      ToastUtils.showWarning(context, '请输入恢复密钥');
+      return;
+    }
+
+    // 去除空格和换行
+    final key = inputKey.trim().replaceAll(RegExp(r'\s+'), '');
+
+    // 验证格式
+    if (key.length != 128) {
+      ToastUtils.showError(context, '恢复密钥长度错误（应为128位）');
+      return;
+    }
+
+    if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(key)) {
+      ToastUtils.showError(context, '恢复密钥格式错误');
+      return;
+    }
+
+    // 验证哈希
+    final storedHash = await SecureStorage.read(AppConstants.keyMnemonicHash);
+    if (storedHash == null) {
+      ToastUtils.showError(context, '未设置恢复密钥');
+      return;
+    }
+
+    final bytes = utf8.encode(key);
+    final inputHash = sha256.convert(bytes).toString();
+
+    if (inputHash != storedHash) {
+      ToastUtils.showError(context, '恢复密钥错误');
+      return;
+    }
+
+    // ✅ 验证通过，解密 masterKey
+    final encryptedMasterKeyBase64 = await SecureStorage.read(
+      AppConstants.keyEncryptedMasterKeyForRecovery,
+    );
+
+    if (encryptedMasterKeyBase64 == null) {
+      ToastUtils.showError(context, '未找到加密的主密钥');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // 从恢复密钥派生解密密钥
+      final recoveryBytes = utf8.encode(key);
+      final recoveryHash = sha256.convert(recoveryBytes);
+      final recoveryKey = Uint8List.fromList(recoveryHash.bytes);
+
+      final encryptedMasterKey = base64Decode(encryptedMasterKeyBase64);
+      final masterKey = await AESGCMHelper.decryptBytes(encryptedMasterKey, recoveryKey);
+
+      final authNotifier = ref.read(authProvider.notifier);
+      authNotifier.unlock(masterKey: masterKey);
+
+      // ✅ 关闭对话框
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      // ✅ 跳转到主页，并显示提示
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          AppRoutes.home,
+              (route) => false,
+        );
+        // 延迟显示提示，等页面加载完成
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _showRecoveryWarningDialog();
+          }
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      ToastUtils.showError(context, '解锁失败: $e');
+    }
+  }
+
+  /// ✅ 显示恢复密钥警告提示
+  void _showRecoveryWarningDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber, color: Colors.orange.shade700),
+            const SizedBox(width: 8),
+            const Text('⚠️ 重要提醒'),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '您正在使用恢复密钥解锁应用。',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+            ),
+            SizedBox(height: 12),
+            Text(
+              '请尽快将主密码记在安全的地方！\n\n'
+                  '• 主密码是您唯一能正常解锁的方式\n'
+                  '• 恢复密钥仅作为备用，不建议日常使用\n'
+                  '• 如果忘记主密码，请立即重新设置',
+              style: TextStyle(fontSize: 14, height: 1.5),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ========== 模式切换方法 ==========
 
-  /// 切换到手势解锁模式
   void _switchToGesture() {
     setState(() {
       _unlockMode = 1;
       _error = null;
       _currentPattern = [];
+      _showForgotPassword = false;
     });
-    // 清空画板
     _gestureKey.currentState?.clearPattern();
   }
 
-  /// 切换到密码解锁模式
   void _switchToPassword() {
     setState(() {
       _unlockMode = 0;
       _error = null;
       _passwordController.clear();
+      _showForgotPassword = false;
     });
   }
 
@@ -346,7 +450,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
   @override
   Widget build(BuildContext context) {
-    // 正在检查初始化状态，显示加载
     if (_isChecking) {
       return const Scaffold(
         body: Center(
@@ -384,7 +487,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                   ? _buildPasswordInput()
                   : _buildGestureInput(),
 
-              // ✅ 底部留白
               const SizedBox(height: 40),
             ],
           ),
@@ -453,6 +555,21 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                 : const Text('解锁', style: TextStyle(fontSize: 16)),
           ),
         ),
+        // ✅ 只在密码输入错误后显示"忘记密码？"
+        if (_showForgotPassword) ...[
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: _showRecoveryDialog,
+            child: Text(
+              '忘记主密码？',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.orange.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

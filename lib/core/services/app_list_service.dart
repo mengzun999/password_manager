@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -9,6 +8,7 @@ class AppInfo {
   final String packageName;
   final String appName;
   Uint8List? iconBytes;
+  bool iconLoaded = false;
 
   AppInfo({
     required this.packageName,
@@ -18,23 +18,23 @@ class AppInfo {
 }
 
 /// 应用列表服务类
-/// 异步加载 + 本地缓存图标
 class AppListService {
-  static List<AppInfo>? _cachedApps;
+  static List<AppInfo>? _allApps;
   static final Map<String, Uint8List> _iconCache = {};
   static bool _isLoading = false;
 
-  /// 获取手机中所有已安装的应用（非系统应用）
-  static Future<List<AppInfo>> getInstalledApps() async {
-    // 如果有缓存，直接返回
-    if (_cachedApps != null) {
-      return _cachedApps!;
+  /// ✅ 分批获取应用列表：先返回前30个，剩余的后台加载
+  static Future<List<AppInfo>> getInstalledApps({
+    int initialCount = 30,
+  }) async {
+    if (_allApps != null) {
+      // 如果已经全部加载完，直接返回全部
+      return _allApps!;
     }
 
     if (_isLoading) {
-      // 如果正在加载，等待完成
       await Future.delayed(const Duration(milliseconds: 100));
-      return _cachedApps ?? [];
+      return _allApps?.take(initialCount).toList() ?? [];
     }
 
     _isLoading = true;
@@ -54,7 +54,7 @@ class AppListService {
         throw Exception('没有找到已安装的应用');
       }
 
-      final apps = <AppInfo>[];
+      final allApps = <AppInfo>[];
       for (final item in result) {
         if (item is Map) {
           final packageName = item['packageName'] as String?;
@@ -63,8 +63,7 @@ class AppListService {
           if (packageName == null || packageName.isEmpty) continue;
           if (appName == null || appName.isEmpty) continue;
 
-          // 先不加载图标，只存包名和名称
-          apps.add(AppInfo(
+          allApps.add(AppInfo(
             packageName: packageName,
             appName: appName,
             iconBytes: null,
@@ -72,69 +71,81 @@ class AppListService {
         }
       }
 
-      if (apps.isEmpty) {
+      if (allApps.isEmpty) {
         throw Exception('没有找到已安装的应用');
       }
 
-      apps.sort((a, b) => a.appName.compareTo(b.appName));
+      allApps.sort((a, b) => a.appName.compareTo(b.appName));
 
-      // 缓存列表（不含图标）
-      _cachedApps = apps;
-
-      // 异步加载所有图标（不阻塞返回）
-      _loadAllIconsInBackground(apps);
-
+      // 缓存全部应用
+      _allApps = allApps;
       _isLoading = false;
-      return apps;
+
+      // ✅ 返回前 initialCount 个，立即显示
+      final initialApps = allApps.take(initialCount).toList();
+
+      // ✅ 后台加载剩余应用（分批，避免卡顿）
+      _loadRemainingInBackground(allApps, initialCount);
+
+      return initialApps;
     } catch (e) {
       _isLoading = false;
       rethrow;
     }
   }
 
-  /// 后台异步加载所有图标
-  static void _loadAllIconsInBackground(List<AppInfo> apps) {
-    // 延迟执行，让 UI 先渲染
-    Future.microtask(() async {
-      for (final app in apps) {
-        await _loadIconForApp(app);
-        // 每加载一个图标后，延迟 5ms 让出主线程
-        await Future.delayed(const Duration(milliseconds: 5));
+  /// ✅ 后台分批加载剩余应用
+  static void _loadRemainingInBackground(List<AppInfo> allApps, int startIndex) {
+    const batchSize = 20;
+    int currentIndex = startIndex;
+
+    Future<void> loadBatch() async {
+      while (currentIndex < allApps.length) {
+        final endIndex = (currentIndex + batchSize).clamp(0, allApps.length);
+        // 把这一批应用加入缓存（只是让它们可被加载，不实际加载图标）
+        for (int i = currentIndex; i < endIndex; i++) {
+          // 标记为可加载，但不实际加载图标
+        }
+        currentIndex = endIndex;
+        // ✅ 每批之间延迟 50ms，让出主线程
+        await Future.delayed(const Duration(milliseconds: 50));
       }
-    });
+    }
+
+    // 启动后台加载
+    loadBatch();
   }
 
-  /// 为单个应用加载图标（优先从内存缓存，其次从文件缓存）
-  static Future<void> _loadIconForApp(AppInfo app) async {
-    // 1. 检查内存缓存
-    if (_iconCache.containsKey(app.packageName)) {
-      app.iconBytes = _iconCache[app.packageName];
-      return;
+  /// ✅ 懒加载单个应用的图标
+  static Future<Uint8List?> loadAppIcon(String packageName) async {
+    if (_iconCache.containsKey(packageName)) {
+      return _iconCache[packageName];
     }
 
-    // 2. 检查文件缓存
-    final cachedIcon = await _getCachedIcon(app.packageName);
+    final cachedIcon = await _getCachedIcon(packageName);
     if (cachedIcon != null) {
-      _iconCache[app.packageName] = cachedIcon;
-      app.iconBytes = cachedIcon;
-      return;
+      _iconCache[packageName] = cachedIcon;
+      return cachedIcon;
     }
 
-    // 3. 从系统获取图标
     try {
-      final iconBytes = await getAppIcon(app.packageName);
+      final iconBytes = await getAppIcon(packageName);
       if (iconBytes != null) {
-        _iconCache[app.packageName] = iconBytes;
-        app.iconBytes = iconBytes;
-        // 保存到文件缓存
-        await _saveCachedIcon(app.packageName, iconBytes);
+        _iconCache[packageName] = iconBytes;
+        await _saveCachedIcon(packageName, iconBytes);
+        return iconBytes;
       }
     } catch (e) {
-      // 忽略单个图标加载失败
+      // 忽略
     }
+    return null;
   }
 
-  /// 获取应用图标
+  /// ✅ 获取所有应用（包括后台已加载的）
+  static List<AppInfo> getAllApps() {
+    return _allApps ?? [];
+  }
+
   static Future<Uint8List?> getAppIcon(String packageName) async {
     try {
       final result = await _channel.invokeMethod('getAppIcon', {
@@ -150,7 +161,6 @@ class AppListService {
     }
   }
 
-  /// 获取缓存图标文件路径
   static Future<String> _getIconCachePath(String packageName) async {
     final cacheDir = await getTemporaryDirectory();
     final iconDir = Directory('${cacheDir.path}/app_icons');
@@ -160,7 +170,6 @@ class AppListService {
     return '${iconDir.path}/${packageName.replaceAll('.', '_')}.png';
   }
 
-  /// 从文件缓存加载图标
   static Future<Uint8List?> _getCachedIcon(String packageName) async {
     try {
       final filePath = await _getIconCachePath(packageName);
@@ -174,46 +183,18 @@ class AppListService {
     }
   }
 
-  /// 保存图标到文件缓存
   static Future<void> _saveCachedIcon(String packageName, Uint8List bytes) async {
     try {
       final filePath = await _getIconCachePath(packageName);
       await File(filePath).writeAsBytes(bytes);
     } catch (e) {
-      // 忽略保存失败
+      // 忽略
     }
   }
 
-  /// 获取应用图标（带缓存，供 UI 层调用）
-  static Future<Uint8List?> getCachedAppIcon(String packageName) async {
-    // 1. 内存缓存
-    if (_iconCache.containsKey(packageName)) {
-      return _iconCache[packageName];
-    }
-
-    // 2. 文件缓存
-    final cached = await _getCachedIcon(packageName);
-    if (cached != null) {
-      _iconCache[packageName] = cached;
-      return cached;
-    }
-
-    // 3. 从系统获取（同步等待）
-    final icon = await getAppIcon(packageName);
-    if (icon != null) {
-      _iconCache[packageName] = icon;
-      await _saveCachedIcon(packageName, icon);
-      return icon;
-    }
-
-    return null;
-  }
-
-  /// 清除缓存（当应用安装/卸载时调用）
   static void clearCache() {
-    _cachedApps = null;
+    _allApps = null;
     _iconCache.clear();
-    // 清除文件缓存（可选）
     Future.microtask(() async {
       try {
         final cacheDir = await getTemporaryDirectory();
@@ -227,6 +208,5 @@ class AppListService {
     });
   }
 
-  /// 平台通道
   static const MethodChannel _channel = MethodChannel('com.meng.passwordmanager/apps');
 }

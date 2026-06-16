@@ -11,6 +11,8 @@ import 'package:password_manager/providers/auth_provider.dart';
 import 'package:password_manager/utils/helpers.dart';
 import 'package:password_manager/pages/image_viewer_page.dart';
 
+import '../../utils/toast_utils.dart';
+
 /// 密码详情页面
 class PasswordDetailPage extends ConsumerStatefulWidget {
   final String entryId;
@@ -118,9 +120,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     final masterKey = _getMasterKey();
     if (masterKey == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('未解锁，请重新登录')),
-        );
+        ToastUtils.showError(context, '未解锁，请重新登录');
       }
       return;
     }
@@ -152,9 +152,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
         _isDecrypting = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('解密失败: $e')),
-        );
+        ToastUtils.showError(context, '解密失败: $e');
       }
     }
   }
@@ -164,9 +162,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
 
     await Helpers.copyToClipboard(text);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已复制 $label')),
-      );
+      ToastUtils.showSuccess(context, '已复制 $label');
     }
   }
 
@@ -174,23 +170,11 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
   Future<void> _deleteEntry() async {
 
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除'),
-        content: Text('确定要删除 "${_entry?.title}" 吗？\n\n注意：关联的图片也会被删除。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+    final confirmed = await ToastUtils.showDangerConfirmDialog(
+      context,
+      title: '删除',
+      content: '确定要删除 "${_entry?.title}" 吗？\n\n注意：关联的图片也会被删除。',
+      confirmText: '删除',
     );
 
     if (confirmed == true && _entry != null) {

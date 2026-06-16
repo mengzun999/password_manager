@@ -11,6 +11,8 @@ import 'package:password_manager/core/storage/shared_prefs.dart';
 import 'package:password_manager/providers/auth_provider.dart';
 import 'package:password_manager/providers/settings_provider.dart';
 
+import '../../utils/toast_utils.dart';
+
 /// 指纹设置页面（设置页面的指纹设置）
 class BiometricSetupPage extends ConsumerStatefulWidget {
   const BiometricSetupPage({super.key});
@@ -57,13 +59,6 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
     setState(() => _isLoading = false);
   }
 
-  /// 显示提示信息
-  void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
   /// 显示密码输入对话框（用于验证主密码）
   Future<String?> _showPasswordDialog() async {
     final controller = TextEditingController();
@@ -108,7 +103,7 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
     // 1. 验证主密码
     final verified = await _verifyMasterPassword();
     if (!verified) {
-      _showSnackBar('验证失败');
+      ToastUtils.showError(context, '验证失败');
       return;
     }
 
@@ -128,7 +123,7 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
       });
 
       if (!isAuthenticated) {
-        _showSnackBar('验证失败，请重试');
+        ToastUtils.showError(context, '验证失败，请重试');
         return;
       }
 
@@ -137,7 +132,7 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
       final masterKey = authState.masterKey;
 
       if (masterKey == null) {
-        _showSnackBar('未获取到主密钥');
+        ToastUtils.showError(context, '未获取到主密钥');
         return;
       }
 
@@ -169,13 +164,13 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
         _isLoading = false;
       });
 
-      _showSnackBar('指纹解锁已启用');
+      ToastUtils.showSuccess(context, '指纹解锁已启用');
     } catch (e) {
       setState(() {
         _isAuthenticating = false;
         _error = '启用失败: $e';
       });
-      _showSnackBar('启用失败');
+      ToastUtils.showError(context, '启用失败');
     }
   }
 
@@ -184,7 +179,7 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
     // 1. 验证主密码
     final verified = await _verifyMasterPassword();
     if (!verified) {
-      _showSnackBar('验证失败');
+      ToastUtils.showSuccess(context, '指纹解锁已关闭');
       return;
     }
 
@@ -206,9 +201,9 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
         _isLoading = false;
       });
 
-      _showSnackBar('指纹解锁已关闭');
+      ToastUtils.showSuccess(context, '指纹解锁已关闭');
     } catch (e) {
-      _showSnackBar('关闭失败: $e');
+      ToastUtils.showError(context, '关闭失败: $e');
       setState(() => _isLoading = false);
     }
   }

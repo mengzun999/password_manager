@@ -8,6 +8,7 @@ import 'package:password_manager/core/crypto/aes_gcm.dart';
 import 'package:password_manager/core/storage/secure_storage.dart';
 import 'package:password_manager/core/storage/shared_prefs.dart';
 import 'package:password_manager/providers/auth_provider.dart';
+import 'package:password_manager/utils/toast_utils.dart';
 import 'package:password_manager/widgets/gesture_pattern_view.dart';
 
 /// 手势图案设置页面
@@ -37,6 +38,7 @@ class _GestureSetupPageState extends ConsumerState<GestureSetupPage> {
         _isSaving = false;
         _error = '未获取到主密钥';
       });
+      ToastUtils.showError(context, '未获取到主密钥');
       return;
     }
 
@@ -118,44 +120,66 @@ class _GestureSetupPageState extends ConsumerState<GestureSetupPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_step == 1 ? '设置手势图案' : '确认手势图案'),
+        automaticallyImplyLeading: false,
         actions: [
-          TextButton(onPressed: _reset, child: const Text('重设')),
+          TextButton(
+            onPressed: _reset,
+            child: const Text('重设'),
+          ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(12),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      _step == 1
+                          ? '绘制你的手势图案（至少连接4个点）'
+                          : '请再次绘制相同的手势图案',
+                      style: TextStyle(color: Colors.blue.shade800),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-              child: Text(
-                _step == 1
-                    ? '绘制你的手势图案（至少连接4个点）'
-                    : '请再次绘制相同的手势图案',
-                style: TextStyle(color: Colors.blue.shade800),
+              const SizedBox(height: 20),
+              Center(
+                child: SizedBox(
+                  width: 280,
+                  height: 280,
+                  child: GesturePatternView(
+                    key: _patternKey,
+                    onPatternComplete: _onPatternComplete,
+                    onPatternChanged: (pattern) {
+                      setState(() => _currentPattern = pattern);
+                    },
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 40),
-            Center(
-              child: GesturePatternView(
-                key: _patternKey,
-                onPatternComplete: _onPatternComplete,
-                onPatternChanged: (pattern) {
-                  setState(() => _currentPattern = pattern);
-                },
-              ),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 16),
-              Text(_error!, style: const TextStyle(color: Colors.red)),
+              const SizedBox(height: 20),
+              if (_isSaving)
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: CircularProgressIndicator(),
+                ),
+              const SizedBox(height: 40),
             ],
-            const SizedBox(height: 40),
-            if (_isSaving) const CircularProgressIndicator(),
-          ],
+          ),
         ),
       ),
     );

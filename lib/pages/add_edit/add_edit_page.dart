@@ -180,23 +180,11 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
 
     final image = _savedImageModels[index];
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除图片'),
-        content: const Text('确定要删除这张图片吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+    final confirmed = await ToastUtils.showDangerConfirmDialog(
+      context,
+      title: '删除图片',
+      content: '确定要删除这张图片吗？',
+      confirmText: '删除',
     );
 
     if (confirmed != true) return;

@@ -7,6 +7,8 @@ import 'package:password_manager/providers/auth_provider.dart';
 import 'package:password_manager/providers/password_provider.dart';
 import 'package:password_manager/utils/helpers.dart';
 
+import '../../utils/toast_utils.dart';
+
 /// 密码列表主页
 class PasswordListPage extends ConsumerStatefulWidget {
   const PasswordListPage({super.key});
@@ -40,31 +42,17 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
   Future<void> _deleteEntry(String id, String title) async {
     // ✅ 用户执行操作，更新活动时间
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除'),
-        content: Text('确定要删除 "$title" 吗？此操作不可恢复。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+    final confirmed = await ToastUtils.showDangerConfirmDialog(
+      context,
+      title: '删除',
+      content: '确定要删除 "$title" 吗？此操作不可恢复。',
+      confirmText: '删除',
     );
 
     if (confirmed == true) {
       await ref.read(passwordProvider.notifier).deleteEntry(id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已删除')),
-        );
+        ToastUtils.showSuccess(context, '已删除');
       }
     }
   }
@@ -73,9 +61,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
   Future<void> _copyToClipboard(String text, String label) async {
     await Helpers.copyToClipboard(text);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已复制 $label')),
-      );
+      ToastUtils.showSuccess(context, '已复制 $label');
     }
   }
 
@@ -85,25 +71,19 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
 
     final masterKey = ref.read(masterKeyProvider);
     if (masterKey == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('未解锁，请重新登录')),
-      );
+      ToastUtils.showError(context, '未解锁，请重新登录');
       return;
     }
 
     if (entry.encryptedPassword == null || entry.encryptedPassword!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('没有保存密码')),
-      );
+      ToastUtils.showError(context, '没有保存密码');
       return;
     }
 
     try {
       final decrypted = await PasswordHelper.decryptPassword(entry, masterKey);
       if (decrypted == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('解密失败')),
-        );
+        ToastUtils.showError(context, '解密失败');
         return;
       }
 
@@ -206,7 +186,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                     });
                   },
                   icon: const Icon(Icons.apps),
-                  label: const Text('从应用列表添加'),
+                  label: const Text('应用列表'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),

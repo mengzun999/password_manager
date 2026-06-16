@@ -6,6 +6,8 @@ import 'package:password_manager/core/models/image_model.dart';
 import 'package:password_manager/core/services/image_service.dart';
 import 'package:password_manager/providers/auth_provider.dart';
 
+import '../utils/toast_utils.dart';
+
 /// 图片查看器页面
 ///
 /// 全屏查看图片，支持缩放、滑动切换
@@ -106,32 +108,19 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
 
   /// 删除当前图片
   Future<void> _deleteImage() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除图片'),
-        content: const Text('确定要删除这张图片吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+    final confirmed = await ToastUtils.showConfirmDialog(
+      context,
+      title: '删除图片',
+      content: '确定要删除这张图片吗？',
+      confirmText: '删除',
+      isDestructive: true,
     );
 
     if (confirmed != true) return;
 
     final masterKey = ref.read(masterKeyProvider);
     if (masterKey == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先解锁')),
-      );
+      ToastUtils.showError(context, '请先解锁');
       return;
     }
 
@@ -197,14 +186,10 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('删除失败')),
-        );
+        ToastUtils.showError(context, '删除失败');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('删除失败: $e')),
-      );
+      ToastUtils.showError(context, '删除失败: $e');
     }
   }
 

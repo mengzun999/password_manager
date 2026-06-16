@@ -54,11 +54,16 @@ class _SetupMasterPasswordPageState
       return;
     }
 
+    // ✅ 先显示加载状态
     setState(() {
       _error = null;
       _isLoading = true;
     });
 
+    // ✅ 让 UI 完成当前帧渲染（转圈显示出来）
+    await Future.delayed(Duration.zero);
+
+    // ✅ 再执行耗时操作
     final authNotifier = ref.read(authProvider.notifier);
     await authNotifier.setupMasterPassword(password);
 
@@ -164,7 +169,6 @@ class _SetupMasterPasswordPageState
                       : const Text('下一步'),
                 ),
               ),
-              // ✅ 底部留白，防止键盘弹出时内容被遮挡
               const SizedBox(height: 40),
             ],
           ),

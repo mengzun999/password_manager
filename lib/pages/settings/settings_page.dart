@@ -16,6 +16,7 @@ import 'package:password_manager/providers/auth_provider.dart';
 import 'package:password_manager/providers/password_provider.dart';
 import 'package:password_manager/providers/settings_provider.dart';
 import 'package:password_manager/widgets/gesture_pattern_view.dart';
+import '../../utils/toast_utils.dart';
 import 'biometric_setup.dart';
 import 'gesture_setup_page.dart';
 import 'dart:async';
@@ -59,26 +60,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final authNotifier = ref.read(authProvider.notifier);
     final isValid = await authNotifier.verifyMasterPassword(currentPassword);
     if (!isValid) {
-      _showSnackBar('当前密码错误');
+      ToastUtils.showError(context, '当前密码错误');
       return;
     }
 
     final newPassword = await _showPasswordDialog('设置新密码', '请输入新主密码（至少6位）');
     if (newPassword == null || newPassword.length < 6) {
-      _showSnackBar('密码至少6位');
+      ToastUtils.showError(context, '密码至少6位');
       return;
     }
 
     final confirmPassword = await _showPasswordDialog('确认新密码', '请再次输入新主密码');
     if (newPassword != confirmPassword) {
-      _showSnackBar('两次输入的密码不一致');
+      ToastUtils.showError(context, '两次输入的密码不一致');
       return;
     }
 
     final oldSaltBase64 = await SecureStorage.read(AppConstants.keySalt);
     final oldMasterKey = await authNotifier.verifyAndGetKey(currentPassword);
     if (oldSaltBase64 == null || oldMasterKey == null) {
-      _showSnackBar('获取密钥失败');
+      ToastUtils.showError(context, '获取密钥失败');
       return;
     }
 
@@ -153,9 +154,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       await _reEncryptForBiometric(newMasterKey);
       authNotifier.unlock(masterKey: newMasterKey);
 
-      _showSnackBar('主密码修改成功');
+      ToastUtils.showSuccess(context, '主密码修改成功');
     } catch (e) {
-      _showSnackBar('修改失败: $e');
+      ToastUtils.showError(context, '修改失败: $e');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -222,7 +223,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       context,
       MaterialPageRoute(builder: (_) => const GestureSetupPage()),
     );
-    if (result == true && mounted) _showSnackBar('手势图案设置成功');
+    if (result == true && mounted) ToastUtils.showSuccess(context, '手势图案设置成功');
   }
 
   Future<bool> _verifyExistingGesture() async {
@@ -243,7 +244,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               if (mounted) {
                 Navigator.pop(context);
                 completer.complete(isValid);
-                if (!isValid) _showSnackBar('手势错误');
+                if (!isValid) ToastUtils.showError(context, '手势错误');
               }
             },
             onPatternChanged: (_) {},
@@ -268,7 +269,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _exportBackup() async {
     final masterKey = ref.read(authProvider).masterKey;
     if (masterKey == null) {
-      _showSnackBar('请先解锁应用');
+      ToastUtils.showError(context, '请先解锁应用');
       return;
     }
 
@@ -282,12 +283,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           [XFile(file.path)],
           text: '密码管理器备份文件，请妥善保管',
         );
-        _showSnackBar('备份已导出');
+        ToastUtils.showSuccess(context, '备份已导出');
       } else {
-        _showSnackBar('导出失败');
+        ToastUtils.showError(context, '导出失败');
       }
     } catch (e) {
-      _showSnackBar('导出失败: $e');
+      ToastUtils.showError(context, '导入失败: $e');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -298,30 +299,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     final masterKey = ref.read(authProvider).masterKey;
     if (masterKey == null) {
-      _showSnackBar('请先解锁应用');
+      ToastUtils.showError(context, '请先解锁应用');
       return;
     }
 
     final filePath = await BackupService.pickBackupFile();
     if (filePath == null) return;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('导入备份'),
-        content: const Text('导入备份将覆盖当前所有数据，确定继续吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('导入'),
-          ),
-        ],
-      ),
+    final confirmed = await ToastUtils.showConfirmDialog(
+      context,
+      title: '导入备份',
+      content: '导入备份将覆盖当前所有数据，确定继续吗？',
+      confirmText: '导入',
     );
     if (confirmed != true) return;
 
@@ -329,13 +318,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     try {
       final success = await BackupService.importBackup(filePath, masterKey);
       if (success && mounted) {
-        _showSnackBar('导入成功');
+        ToastUtils.showSuccess(context, '导入成功');
         ref.read(passwordProvider.notifier).loadEntries();
       } else {
-        _showSnackBar('导入失败：文件损坏或密钥错误');
+        ToastUtils.showError(context, '导入失败：文件损坏或密钥错误');
       }
     } catch (e) {
-      _showSnackBar('导入失败: $e');
+      ToastUtils.showError(context, '清空失败: $e');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -344,23 +333,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   // ========== 清空数据 ==========
 
   Future<void> _clearAllData() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('危险操作'),
-        content: const Text('确定要清空所有数据吗？此操作不可恢复！'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('清空'),
-          ),
-        ],
-      ),
+    final confirmed = await ToastUtils.showDangerConfirmDialog(
+      context,
+      title: '危险操作',
+      content: '确定要清空所有数据吗？此操作不可恢复！',
+      confirmText: '清空',
     );
 
     if (confirmed == true) {
@@ -378,7 +355,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           );
         }
       } catch (e) {
-        _showSnackBar('清空失败: $e');
+        ToastUtils.showError(context, '清空失败: $e');
         setState(() => _isLoading = false);
       }
     }
@@ -415,11 +392,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  void _showSnackBar(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
+
 
   Future<Directory> _getImagesDir() async {
     final documentsDir = await getApplicationDocumentsDirectory();
