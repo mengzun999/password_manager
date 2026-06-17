@@ -41,12 +41,10 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
   // ========== 悬浮球位置 ==========
   Offset _fabPosition = const Offset(0, 0);
   bool _isDragging = false;
-  bool _isPositionLoaded = true;
   bool _isKeyboardVisible = false;
 
   // ========== 图片：待保存（内存中） ==========
   final List<XFile> _pendingImages = [];
-  // ✅ 缓存待保存图片的缩略图
   final List<Uint8List> _pendingThumbnails = [];
 
   // ========== 图片：已保存（编辑模式） ==========
@@ -65,7 +63,7 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
       _loadSavedImages();
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadFabPosition();
+      _initFabPosition();
     });
   }
 
@@ -93,26 +91,13 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
 
   // ========== 悬浮球位置 ==========
 
-  Future<void> _loadFabPosition() async {
-    final position = await SharedPrefs.getFabPosition();
-    if (position != null) {
-      setState(() {
-        _fabPosition = position;
-        _isPositionLoaded = true;
-      });
-    } else {
-      _initFabPosition();
-    }
-  }
-
   void _initFabPosition() {
     final screenSize = MediaQuery.of(context).size;
     setState(() {
       _fabPosition = Offset(
         screenSize.width - 80,
-        screenSize.height * 0.75,
+        screenSize.height * 0.35,
       );
-      _isPositionLoaded = true;
     });
     _saveFabPosition(_fabPosition);
   }
@@ -621,8 +606,8 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
             ),
           ),
 
-          // ✅ 悬浮球 - 键盘弹出时隐藏，支持拖动
-          if (_isPositionLoaded && !_isKeyboardVisible)
+          // ✅ 悬浮球 - 键盘弹出时隐藏
+          if (!_isKeyboardVisible)
             Positioned(
               left: _fabPosition.dx,
               top: _fabPosition.dy,
@@ -638,11 +623,11 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
                   double newDx = _fabPosition.dx + details.delta.dx;
                   double newDy = _fabPosition.dy + details.delta.dy;
 
+                  final minY = padding + kToolbarHeight + 60;
+                  final maxY = screenSize.height - buttonSize - padding - 20;
+
                   newDx = newDx.clamp(padding, screenSize.width - buttonSize - padding);
-                  newDy = newDy.clamp(
-                    padding + kToolbarHeight,
-                    screenSize.height - buttonSize - padding - 80,
-                  );
+                  newDy = newDy.clamp(minY, maxY);
 
                   setState(() {
                     _fabPosition = Offset(newDx, newDy);
