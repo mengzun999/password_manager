@@ -7,19 +7,31 @@ import 'package:password_manager/providers/auth_provider.dart';
 import 'package:password_manager/constants/app_constants.dart';
 import 'package:password_manager/core/storage/secure_storage.dart';
 import 'package:password_manager/core/crypto/pbkdf2.dart';
+import 'package:password_manager/core/widgets/no_back_page.dart';
 
 /// 设置主密码页面
-class SetupMasterPasswordPage extends ConsumerStatefulWidget {
+class SetupMasterPasswordPage extends NoBackPage {
   const SetupMasterPasswordPage({super.key});
 
   @override
-  ConsumerState<SetupMasterPasswordPage> createState() =>
-      _SetupMasterPasswordPageState();
+  String get title => '设置主密码';
+
+  @override
+  Widget buildContent(BuildContext context) {
+    return const _SetupMasterPasswordContent();
+  }
 }
 
-class _SetupMasterPasswordPageState
-    extends ConsumerState<SetupMasterPasswordPage> {
+class _SetupMasterPasswordContent extends ConsumerStatefulWidget {
+  const _SetupMasterPasswordContent();
 
+  @override
+  ConsumerState<_SetupMasterPasswordContent> createState() =>
+      _SetupMasterPasswordContentState();
+}
+
+class _SetupMasterPasswordContentState
+    extends ConsumerState<_SetupMasterPasswordContent> {
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
 
@@ -54,16 +66,13 @@ class _SetupMasterPasswordPageState
       return;
     }
 
-    // ✅ 先显示加载状态
     setState(() {
       _error = null;
       _isLoading = true;
     });
 
-    // ✅ 让 UI 完成当前帧渲染（转圈显示出来）
     await Future.delayed(Duration.zero);
 
-    // ✅ 再执行耗时操作
     final authNotifier = ref.read(authProvider.notifier);
     await authNotifier.setupMasterPassword(password);
 
@@ -83,95 +92,85 @@ class _SetupMasterPasswordPageState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('设置主密码'),
-        automaticallyImplyLeading: false,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              const Text(
-                '设置一个主密码来保护你的所有密码',
-                style: TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                '请记住这个密码，忘记后需要助记词才能恢复',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const SizedBox(height: 40),
-              TextField(
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                decoration: InputDecoration(
-                  labelText: '主密码',
-                  hintText: '至少6位',
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 20),
+            const Text(
+              '设置一个主密码来保护你的所有密码',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              '请记住这个密码，忘记后需要助记词才能恢复',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 40),
+            TextField(
+              controller: _passwordController,
+              obscureText: _obscurePassword,
+              decoration: InputDecoration(
+                labelText: '主密码',
+                hintText: '至少6位',
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
                   ),
-                  border: const OutlineInputBorder(),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
                 ),
+                border: const OutlineInputBorder(),
               ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _confirmController,
+              obscureText: _obscureConfirm,
+              decoration: InputDecoration(
+                labelText: '确认主密码',
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscureConfirm = !_obscureConfirm;
+                    });
+                  },
+                ),
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            if (_error != null) ...[
               const SizedBox(height: 16),
-              TextField(
-                controller: _confirmController,
-                obscureText: _obscureConfirm,
-                decoration: InputDecoration(
-                  labelText: '确认主密码',
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureConfirm
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _obscureConfirm = !_obscureConfirm;
-                      });
-                    },
-                  ),
-                  border: const OutlineInputBorder(),
-                ),
+              Text(
+                _error!,
+                style: const TextStyle(color: Colors.red),
               ),
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  _error!,
-                  style: const TextStyle(color: Colors.red),
-                ),
-              ],
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _handleSubmit,
-                  child: _isLoading
-                      ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                      : const Text('下一步'),
-                ),
-              ),
-              const SizedBox(height: 40),
             ],
-          ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _handleSubmit,
+                child: _isLoading
+                    ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                    : const Text('下一步'),
+              ),
+            ),
+            const SizedBox(height: 40),
+          ],
         ),
       ),
     );

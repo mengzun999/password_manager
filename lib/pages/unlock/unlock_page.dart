@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -13,7 +14,6 @@ import 'package:password_manager/constants/app_constants.dart';
 import 'package:password_manager/utils/toast_utils.dart';
 import 'package:password_manager/widgets/gesture_pattern_view.dart';
 
-
 /// 解锁页面
 class UnlockPage extends ConsumerStatefulWidget {
   const UnlockPage({super.key});
@@ -23,13 +23,8 @@ class UnlockPage extends ConsumerStatefulWidget {
 }
 
 class _UnlockPageState extends ConsumerState<UnlockPage> {
-  // ========== 控制器 ==========
-
   final _passwordController = TextEditingController();
-
   final GlobalKey<GesturePatternViewState> _gestureKey = GlobalKey();
-
-  // ========== UI 状态变量 ==========
 
   int _unlockMode = 0;
   bool _obscurePassword = true;
@@ -38,11 +33,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
   bool _hasGesture = false;
   List<int> _currentPattern = [];
   bool _isChecking = true;
-
-  /// ✅ 是否显示"忘记密码"按钮（密码验证失败后显示）
   bool _showForgotPassword = false;
-
-  // ========== 生命周期方法 ==========
 
   @override
   void initState() {
@@ -55,8 +46,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     _passwordController.dispose();
     super.dispose();
   }
-
-  // ========== 初始化检查 ==========
 
   Future<void> _checkAndNavigate() async {
     setState(() => _isChecking = true);
@@ -79,16 +68,12 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     _tryBiometricUnlock();
   }
 
-  // ========== 设置加载方法 ==========
-
   Future<void> _loadSettings() async {
     final hasGesture = await SharedPrefs.hasGesture();
     setState(() {
       _hasGesture = hasGesture;
     });
   }
-
-  // ========== 生物识别解锁 ==========
 
   Future<void> _tryBiometricUnlock() async {
     final isEnabled = await SharedPrefs.isBiometricEnabled();
@@ -102,7 +87,9 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
     if (!isAuthenticated || !mounted) return;
 
-    final biometricKeyBase64 = await SecureStorage.read(AppConstants.keyBiometricKeyId);
+    final biometricKeyBase64 = await SecureStorage.read(
+      AppConstants.keyBiometricKeyId,
+    );
     final encryptedMasterKeyBase64 = await SecureStorage.read(
       AppConstants.keyEncryptedMasterKeyForBiometric,
     );
@@ -122,11 +109,13 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     try {
       final biometricKey = base64Decode(biometricKeyBase64);
       final encryptedMasterKey = base64Decode(encryptedMasterKeyBase64);
-      final masterKey = await AESGCMHelper.decryptBytes(encryptedMasterKey, biometricKey);
+      final masterKey = await AESGCMHelper.decryptBytes(
+        encryptedMasterKey,
+        biometricKey,
+      );
 
       final authNotifier = ref.read(authProvider.notifier);
       authNotifier.unlock(masterKey: masterKey);
-
 
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil(
@@ -143,8 +132,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     }
   }
 
-  // ========== 手势解锁 ==========
-
   Future<void> _verifyGestureAndUnlock(List<int> pattern) async {
     if (pattern.length < 4) {
       setState(() {
@@ -160,7 +147,9 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       _error = null;
     });
 
-    final storedGestureHash = await SecureStorage.read(AppConstants.keyGestureHash);
+    final storedGestureHash = await SecureStorage.read(
+      AppConstants.keyGestureHash,
+    );
     final encryptedMasterKeyBase64 = await SecureStorage.read(
       AppConstants.keyEncryptedMasterKeyForGesture,
     );
@@ -189,13 +178,17 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     }
 
     try {
-      final gestureKey = Uint8List.fromList(utf8.encode(storedGestureHash.substring(0, 32)));
+      final gestureKey = Uint8List.fromList(
+        utf8.encode(storedGestureHash.substring(0, 32)),
+      );
       final encryptedMasterKey = base64Decode(encryptedMasterKeyBase64);
-      final masterKey = await AESGCMHelper.decryptBytes(encryptedMasterKey, gestureKey);
+      final masterKey = await AESGCMHelper.decryptBytes(
+        encryptedMasterKey,
+        gestureKey,
+      );
 
       final authNotifier = ref.read(authProvider.notifier);
       authNotifier.unlock(masterKey: masterKey);
-
 
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil(
@@ -213,8 +206,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     }
   }
 
-  // ========== 主密码解锁 ==========
-
   Future<void> _handleUnlock() async {
     final password = _passwordController.text.trim();
 
@@ -223,7 +214,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       return;
     }
 
-    // ✅ 每次输入时隐藏忘记密码按钮
     setState(() {
       _error = null;
       _isLoading = true;
@@ -245,7 +235,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         );
       }
     } else {
-      // ✅ 验证失败，显示错误并显示"忘记密码"按钮
       setState(() {
         _error = '主密码错误';
         _passwordController.clear();
@@ -254,9 +243,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     }
   }
 
-  // ========== ✅ 恢复密钥解锁 ==========
-
-  /// 显示恢复密钥输入对话框
   void _showRecoveryDialog() {
     final controller = TextEditingController();
     showDialog(
@@ -300,17 +286,14 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     );
   }
 
-  /// 使用恢复密钥解锁
   Future<void> _unlockWithRecoveryKey(String inputKey) async {
     if (inputKey.trim().isEmpty) {
       ToastUtils.showWarning(context, '请输入恢复密钥');
       return;
     }
 
-    // 去除空格和换行
     final key = inputKey.trim().replaceAll(RegExp(r'\s+'), '');
 
-    // 验证格式
     if (key.length != 128) {
       ToastUtils.showError(context, '恢复密钥长度错误（应为128位）');
       return;
@@ -321,7 +304,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       return;
     }
 
-    // 验证哈希
     final storedHash = await SecureStorage.read(AppConstants.keyMnemonicHash);
     if (storedHash == null) {
       ToastUtils.showError(context, '未设置恢复密钥');
@@ -336,7 +318,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       return;
     }
 
-    // ✅ 验证通过，解密 masterKey
     final encryptedMasterKeyBase64 = await SecureStorage.read(
       AppConstants.keyEncryptedMasterKeyForRecovery,
     );
@@ -351,18 +332,19 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     });
 
     try {
-      // 从恢复密钥派生解密密钥
       final recoveryBytes = utf8.encode(key);
       final recoveryHash = sha256.convert(recoveryBytes);
       final recoveryKey = Uint8List.fromList(recoveryHash.bytes);
 
       final encryptedMasterKey = base64Decode(encryptedMasterKeyBase64);
-      final masterKey = await AESGCMHelper.decryptBytes(encryptedMasterKey, recoveryKey);
+      final masterKey = await AESGCMHelper.decryptBytes(
+        encryptedMasterKey,
+        recoveryKey,
+      );
 
       final authNotifier = ref.read(authProvider.notifier);
       authNotifier.unlock(masterKey: masterKey);
 
-      // ✅ 先跳转到主页（清空所有路由）
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil(
           AppRoutes.home,
@@ -370,7 +352,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         );
       }
 
-      // ✅ 延迟显示警告对话框（等主页加载完成后）
       if (mounted) {
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) {
@@ -386,7 +367,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     }
   }
 
-  /// ✅ 显示恢复密钥警告提示
   void _showRecoveryWarningDialog() {
     showDialog(
       context: context,
@@ -427,8 +407,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     );
   }
 
-  // ========== 模式切换方法 ==========
-
   void _switchToGesture() {
     setState(() {
       _unlockMode = 1;
@@ -448,8 +426,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     });
   }
 
-  // ========== 界面构建方法 ==========
-
   @override
   Widget build(BuildContext context) {
     if (_isChecking) {
@@ -460,44 +436,42 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('解锁'),
-        automaticallyImplyLeading: false,
-        actions: [
-          if (_hasGesture)
-            TextButton(
-              onPressed: _unlockMode == 0 ? _switchToGesture : _switchToPassword,
-              child: Text(_unlockMode == 0 ? '使用手势' : '使用密码'),
-            ),
-        ],
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.lock,
-                size: 80,
-                color: Colors.grey[400],
+    // ✅ 使用 PopScope 直接包裹
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('解锁'),
+          automaticallyImplyLeading: false,
+          actions: [
+            if (_hasGesture)
+              TextButton(
+                onPressed: _unlockMode == 0 ? _switchToGesture : _switchToPassword,
+                child: Text(_unlockMode == 0 ? '使用手势' : '使用密码'),
               ),
-              const SizedBox(height: 40),
-
-              _unlockMode == 0
-                  ? _buildPasswordInput()
-                  : _buildGestureInput(),
-
-              const SizedBox(height: 40),
-            ],
+          ],
+        ),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.lock,
+                  size: 80,
+                  color: Colors.grey[400],
+                ),
+                const SizedBox(height: 40),
+                _unlockMode == 0 ? _buildPasswordInput() : _buildGestureInput(),
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
-
-  // ========== 密码输入界面 ==========
 
   Widget _buildPasswordInput() {
     return Column(
@@ -551,13 +525,15 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                   ),
                 ),
                 SizedBox(width: 12),
-                Text('验证中...', style: TextStyle(fontSize: 16, color: Colors.white)),
+                Text(
+                  '验证中...',
+                  style: TextStyle(fontSize: 16, color: Colors.white),
+                ),
               ],
             )
                 : const Text('解锁', style: TextStyle(fontSize: 16)),
           ),
         ),
-        // ✅ 只在密码输入错误后显示"忘记密码？"
         if (_showForgotPassword) ...[
           const SizedBox(height: 12),
           TextButton(
@@ -575,8 +551,6 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       ],
     );
   }
-
-  // ========== 手势输入界面 ==========
 
   Widget _buildGestureInput() {
     return Column(
