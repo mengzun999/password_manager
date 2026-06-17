@@ -170,10 +170,15 @@ class BackupService {
   // 导入备份
   // ============================================================
 
+  /// 导入备份
+  ///
+  /// [filePath] 备份文件路径
+  /// [recoveryKeyInput] 用户输入的恢复密钥
+  /// [currentMasterKey] 当前应用的主密钥（用于重新加密数据）
   static Future<bool> importBackup(
       String filePath,
       String recoveryKeyInput,
-      Uint8List currentMasterKey,  // ✅ 新增：当前主密钥
+      Uint8List currentMasterKey,
       ) async {
     try {
       debugPrint('=== 开始导入备份 ===');
@@ -181,77 +186,61 @@ class BackupService {
       final key = recoveryKeyInput.trim().replaceAll(RegExp(r'\s+'), '');
       debugPrint('输入密钥长度: ${key.length}');
 
-      // 1. 验证格式
+      // 1. 验证格式（只验证格式，不验证哈希）
       if (!_isValidRecoveryKey(key)) {
         debugPrint('❌ 步骤1失败：密钥格式错误');
         return false;
       }
       debugPrint('✅ 步骤1通过：密钥格式正确');
 
-      // 2. 验证哈希
-      final storedHash = await SecureStorage.read(AppConstants.keyMnemonicHash);
-      if (storedHash == null) {
-        debugPrint('❌ 步骤2失败：未找到存储的恢复密钥哈希');
-        return false;
-      }
-      debugPrint('存储的哈希: $storedHash');
-
-      final inputHash = sha256.convert(utf8.encode(key)).toString();
-      debugPrint('输入的哈希: $inputHash');
-
-      if (inputHash != storedHash) {
-        debugPrint('❌ 步骤2失败：哈希不匹配');
-        return false;
-      }
-      debugPrint('✅ 步骤2通过：哈希匹配');
-
-      // 3. 派生密钥
+      // 2. 派生密钥（直接从用户输入的密钥派生）
       final recoveryDerivedKey = _deriveKeyFromRecovery(key);
-      debugPrint('✅ 步骤3通过：派生密钥成功，长度: ${recoveryDerivedKey.length}');
+      debugPrint('✅ 步骤2通过：派生密钥成功，长度: ${recoveryDerivedKey.length}');
 
-      // 4. 读取文件
+      // 3. 读取文件
       final file = File(filePath);
       if (!await file.exists()) {
-        debugPrint('❌ 步骤4失败：文件不存在');
+        debugPrint('❌ 步骤3失败：文件不存在');
         return false;
       }
-      debugPrint('✅ 步骤4通过：文件存在');
+      debugPrint('✅ 步骤3通过：文件存在');
 
       final encrypted = await file.readAsString();
       debugPrint('文件大小: ${encrypted.length} 字符');
 
-      // 5. 用恢复密钥解密备份包
+      // 4. ✅ 用用户输入的恢复密钥尝试解密备份包
+      //    如果密钥错误，这里会抛出异常
       debugPrint('开始解密...');
       final jsonString = await AESGCMHelper.decrypt(encrypted, recoveryDerivedKey);
-      debugPrint('✅ 步骤5通过：解密成功，JSON大小: ${jsonString.length}');
+      debugPrint('✅ 步骤4通过：解密成功，JSON大小: ${jsonString.length}');
 
-      // 6. 解析JSON
+      // 5. 解析JSON
       final backupData = jsonDecode(jsonString) as Map<String, dynamic>;
-      debugPrint('✅ 步骤6通过：JSON解析成功');
+      debugPrint('✅ 步骤5通过：JSON解析成功');
 
-      // 7. 验证版本
+      // 6. 验证版本
       final version = backupData['version'] as int?;
       if (version != 1) {
-        debugPrint('❌ 步骤7失败：不支持的版本 $version');
+        debugPrint('❌ 步骤6失败：不支持的版本 $version');
         return false;
       }
-      debugPrint('✅ 步骤7通过：版本 $version');
+      debugPrint('✅ 步骤6通过：版本 $version');
 
-      // 8. 清空数据
+      // 7. 清空数据
       await DatabaseHelper.clearAllData();
       await _clearAllImageFiles();
-      debugPrint('✅ 步骤8通过：已清空数据');
+      debugPrint('✅ 步骤7通过：已清空数据');
 
-      // ✅ 确保 images 表被清空
+      // 确保 images 表被清空
       try {
         final db = await DatabaseHelper.database;
         await db.delete('images');
-        debugPrint('✅ 步骤8.1：已清空 images 表');
+        debugPrint('✅ 步骤7.1：已清空 images 表');
       } catch (e) {
         debugPrint('⚠️ 清空 images 表失败: $e');
       }
 
-      // 9. 恢复条目（用当前主密钥重新加密密码）
+      // 8. 恢复条目（用当前主密钥重新加密密码）
       final entries = backupData['entries'] as List? ?? [];
       debugPrint('恢复 ${entries.length} 条密码记录');
 
@@ -278,9 +267,9 @@ class BackupService {
         );
         await DatabaseHelper.insertEntry(newEntry);
       }
-      debugPrint('✅ 步骤9通过：恢复 ${entries.length} 条记录');
+      debugPrint('✅ 步骤8通过：恢复 ${entries.length} 条记录');
 
-      // 10. 恢复图片
+      // 9. 恢复图片
       final imagesData = backupData['images'] as List? ?? [];
       debugPrint('恢复 ${imagesData.length} 张图片');
       final imagesDir = await _getImagesDir();
@@ -317,13 +306,19 @@ class BackupService {
 
         await DatabaseHelper.insertImage(imageModel);
       }
-      debugPrint('✅ 步骤10通过：恢复 ${imagesData.length} 张图片');
+      debugPrint('✅ 步骤9通过：恢复 ${imagesData.length} 张图片');
 
       debugPrint('=== 导入完成 ===');
       return true;
     } catch (e, stack) {
       debugPrint('❌ 导入异常: $e');
       debugPrint('堆栈: $stack');
+      // ✅ 根据异常类型给出更明确的错误信息
+      if (e.toString().contains('MAC check failed') ||
+          e.toString().contains('Bad state') ||
+          e.toString().contains('decrypt')) {
+        debugPrint('⚠️ 可能是恢复密钥错误或文件损坏');
+      }
       return false;
     }
   }

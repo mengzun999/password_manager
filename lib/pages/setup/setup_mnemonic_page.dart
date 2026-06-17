@@ -34,6 +34,7 @@ class _SetupMnemonicPageState extends ConsumerState<SetupMnemonicPage> {
   void _generateRecoveryKey() {
     final bytes = SecureRandom.generateBytes(64);
     _recoveryKey = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
   }
 
   Future<void> _saveAndContinue() async {

@@ -293,7 +293,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     final recoveryKey = await _showRecoveryKeyDialog(
       title: '输入恢复密钥',
-      hint: '请输入128位恢复密钥（128个十六进制字符）',
+      hint: '请输入备份文件对应的恢复密钥（128个十六进制字符）',
     );
     if (recoveryKey == null || recoveryKey.isEmpty) {
       ToastUtils.showWarning(context, '已取消导入');
@@ -318,17 +318,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     setState(() => _isLoading = true);
     try {
+      // ✅ 传入 currentMasterKey
       final success = await BackupService.importBackup(
         filePath,
         recoveryKey,
-        currentMasterKey,  // ✅ 传入当前主密钥
+        currentMasterKey,
       );
 
       if (success && mounted) {
-        ToastUtils.showSuccess(context, '导入成功');
+        ToastUtils.showSuccess(context, '导入成功！');
+        // ✅ 刷新数据
         ref.read(passwordProvider.notifier).loadEntries();
+        // ✅ 返回上一页
+        if (mounted) {
+          Navigator.pop(context);
+        }
       } else {
-        ToastUtils.showError(context, '导入失败：恢复密钥错误或文件损坏');
+        ToastUtils.showError(
+            context,
+            '导入失败：\n• 恢复密钥错误\n• 备份文件已损坏\n• 或文件版本不兼容'
+        );
       }
     } catch (e) {
       ToastUtils.showError(context, '导入失败: $e');
@@ -570,7 +579,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     final List<Widget> items = [
       _buildSectionHeader('安全'),
-      _buildMenuItem(icon: Icons.lock, title: '修改主密码', onTap: _changeMasterPassword),
+      // _buildMenuItem(icon: Icons.lock, title: '修改主密码', onTap: _changeMasterPassword),
       _buildMenuItem(icon: Icons.draw, title: '修改手势图案', onTap: _changeGesture),
       _buildBiometricSection(settings),
       const Divider(),
