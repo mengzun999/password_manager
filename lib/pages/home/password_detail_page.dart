@@ -10,7 +10,6 @@ import 'package:password_manager/core/storage/database.dart';
 import 'package:password_manager/providers/auth_provider.dart';
 import 'package:password_manager/utils/helpers.dart';
 import 'package:password_manager/pages/image_viewer_page.dart';
-
 import '../../utils/toast_utils.dart';
 
 /// 密码详情页面
@@ -33,7 +32,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
   String? _decryptedPassword;
   bool _isDecrypting = false;
 
-  // ========== ✅ 新增：图片数据 ==========
+  // ========== 图片数据 ==========
   List<ImageModel> _imageModels = [];
   List<Uint8List> _imageThumbnails = [];
   bool _isLoadingImages = false;
@@ -48,9 +47,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
 
   // ========== 数据加载方法 ==========
 
-  /// 从数据库加载密码条目
   Future<void> _loadEntry() async {
-
     setState(() {
       _isLoading = true;
       _decryptedPassword = null;
@@ -64,13 +61,11 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
       _isLoading = false;
     });
 
-    // ✅ 如果条目存在，加载关联的图片
     if (entry != null) {
       _loadImages();
     }
   }
 
-  /// ✅ 新增：加载关联的图片
   Future<void> _loadImages() async {
     if (_entry == null) return;
 
@@ -83,11 +78,9 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
         return;
       }
 
-      // 获取图片元数据
       final images = await ImageService.getEntryImages(_entry!.id);
-
-      // 获取缩略图
       final thumbnails = <Uint8List>[];
+
       for (final image in images) {
         final thumb = await ImageService.getThumbnail(image, masterKey);
         if (thumb != null) {
@@ -106,7 +99,6 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     }
   }
 
-  /// 获取主密钥
   Uint8List? _getMasterKey() {
     final authState = ref.read(authProvider);
     return authState.masterKey;
@@ -114,9 +106,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
 
   // ========== 密码操作 ==========
 
-  /// 解密密码
   Future<void> _decryptPassword() async {
-
     final masterKey = _getMasterKey();
     if (masterKey == null) {
       if (mounted) {
@@ -157,19 +147,14 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     }
   }
 
-  /// 复制文本到剪贴板
   Future<void> _copyToClipboard(String text, String label) async {
-
     await Helpers.copyToClipboard(text);
     if (mounted) {
       ToastUtils.showSuccess(context, '已复制 $label');
     }
   }
 
-  /// 删除当前密码条目
   Future<void> _deleteEntry() async {
-
-
     final confirmed = await ToastUtils.showDangerConfirmDialog(
       context,
       title: '删除',
@@ -178,8 +163,6 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     );
 
     if (confirmed == true && _entry != null) {
-      // 数据库外键级联删除会自动删除图片记录
-      // 但图片文件需要手动删除
       final masterKey = _getMasterKey();
       if (masterKey != null) {
         await ImageService.deleteAllImagesForEntry(_entry!.id, masterKey);
@@ -191,10 +174,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     }
   }
 
-  /// ✅ 新增：查看大图
   void _viewImage(int index) {
-
-
     if (index >= _imageThumbnails.length) return;
     if (_entry == null) return;
 
@@ -209,7 +189,6 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
         ),
       ),
     ).then((_) {
-      // 从查看器返回后刷新图片列表（可能有删除操作）
       _loadImages();
     });
   }
@@ -218,6 +197,8 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('密码详情'),
@@ -225,8 +206,6 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () {
-
-
               if (_entry != null) {
                 Navigator.pushNamed(
                   context,
@@ -252,30 +231,38 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     );
   }
 
-  /// 错误状态
   Widget _buildErrorState() {
-    return const Center(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.error_outline, size: 64, color: Colors.grey),
-          SizedBox(height: 16),
-          Text('密码条目不存在'),
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: isDark ? Colors.grey.shade500 : Colors.grey,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '密码条目不存在',
+            style: TextStyle(
+              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  /// 主要内容
   Widget _buildContent() {
     final entry = _entry!;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 标题
           _buildSection(
             title: '标题',
             icon: Icons.title,
@@ -283,7 +270,6 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
           ),
           const SizedBox(height: 16),
 
-          // 用户名（如果有）
           if (entry.username != null && entry.username!.isNotEmpty)
             _buildSection(
               title: '用户名',
@@ -295,14 +281,12 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
           if (entry.username != null && entry.username!.isNotEmpty)
             const SizedBox(height: 16),
 
-          // 密码（如果有）
           if (entry.encryptedPassword != null && entry.encryptedPassword!.isNotEmpty)
             _buildPasswordSection(),
 
           if (entry.encryptedPassword != null && entry.encryptedPassword!.isNotEmpty)
             const SizedBox(height: 16),
 
-          // 备注（如果有）
           if (entry.notes != null && entry.notes!.isNotEmpty)
             _buildSection(
               title: '备注',
@@ -312,25 +296,30 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
 
           const SizedBox(height: 16),
 
-          // ✅ 新增：图片区域
           _buildImageSection(),
 
           const SizedBox(height: 24),
 
-          // 最后修改时间
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
+              color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: [
-                Icon(Icons.access_time, size: 16, color: Colors.grey.shade600),
+                Icon(
+                  Icons.access_time,
+                  size: 16,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   '最后修改：${Helpers.formatDate(entry.updatedAt)}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
                 ),
               ],
             ),
@@ -340,35 +329,49 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     );
   }
 
-  /// 信息区块
   Widget _buildSection({
     required String title,
     required IconData icon,
     required String content,
     VoidCallback? onCopy,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: isDark ? Colors.grey.shade800 : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(
+          color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 20, color: Colors.grey[600]),
+              Icon(
+                icon,
+                size: 20,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+              ),
               const SizedBox(width: 8),
               Text(
                 title,
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                ),
               ),
               const Spacer(),
               if (onCopy != null)
                 IconButton(
-                  icon: Icon(Icons.copy, size: 18, color: Colors.grey[600]),
+                  icon: Icon(
+                    Icons.copy,
+                    size: 18,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
                   onPressed: onCopy,
                   tooltip: '复制',
                   padding: EdgeInsets.zero,
@@ -379,16 +382,19 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
           const SizedBox(height: 8),
           Text(
             content,
-            style: const TextStyle(fontSize: 16),
+            style: TextStyle(
+              fontSize: 16,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
           ),
         ],
       ),
     );
   }
 
-  /// 密码区块
   Widget _buildPasswordSection() {
     final entry = _entry!;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     String displayPassword;
     if (_decryptedPassword == null) {
@@ -402,31 +408,38 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: isDark ? Colors.grey.shade800 : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(
+          color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.lock, size: 20, color: Colors.grey[600]),
+              Icon(
+                Icons.lock,
+                size: 20,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+              ),
               const SizedBox(width: 8),
               Text(
                 '密码',
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                ),
               ),
               const Spacer(),
               IconButton(
                 icon: Icon(
                   _passwordHidden ? Icons.visibility_off : Icons.visibility,
                   size: 18,
-                  color: Colors.grey[600],
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                 ),
                 onPressed: () async {
-
-
                   if (_decryptedPassword == null && !_isDecrypting) {
                     await _decryptPassword();
                   }
@@ -440,9 +453,12 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                icon: Icon(Icons.copy, size: 18, color: Colors.grey[600]),
+                icon: Icon(
+                  Icons.copy,
+                  size: 18,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                ),
                 onPressed: () async {
-
                   if (_decryptedPassword == null && !_isDecrypting) {
                     await _decryptPassword();
                   }
@@ -469,75 +485,88 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
           else
             SelectableText(
               displayPassword,
-              style: const TextStyle(fontSize: 16),
+              style: TextStyle(
+                fontSize: 16,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
             ),
         ],
       ),
     );
   }
 
-  /// ✅ 新增：图片区域
   Widget _buildImageSection() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     if (_isLoadingImages) {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.grey.shade50,
+          color: isDark ? Colors.grey.shade800 : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
+          border: Border.all(
+            color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+          ),
         ),
-        child: const Row(
+        child: Row(
           children: [
-            SizedBox(
+            const SizedBox(
               width: 20,
               height: 20,
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
-            SizedBox(width: 12),
-            Text('加载图片中...'),
+            const SizedBox(width: 12),
+            Text(
+              '加载图片中...',
+              style: TextStyle(
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+              ),
+            ),
           ],
         ),
       );
     }
 
     if (_imageThumbnails.isEmpty) {
-      return const SizedBox.shrink(); // 没有图片时不显示
+      return const SizedBox.shrink();
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 标题
         Row(
           children: [
-            Icon(Icons.image, size: 20, color: Colors.grey[600]),
+            Icon(
+              Icons.image,
+              size: 20,
+              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+            ),
             const SizedBox(width: 8),
             Text(
               '图片（${_imageThumbnails.length}张）',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+              style: TextStyle(
+                fontSize: 14,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 8),
-
-        // 图片网格
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4, // 每行4张缩略图
+            crossAxisCount: 4,
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
             childAspectRatio: 1,
           ),
           itemCount: _imageThumbnails.length > 8 ? 9 : _imageThumbnails.length,
           itemBuilder: (context, index) {
-            // 如果图片超过8张，第9个位置显示 "+N"
             if (_imageThumbnails.length > 8 && index == 8) {
               final remaining = _imageThumbnails.length - 8;
               return _buildMoreImagesButton(remaining);
             }
-
             return _buildImageThumbnail(index);
           },
         ),
@@ -546,16 +575,18 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     );
   }
 
-  /// 图片缩略图
   Widget _buildImageThumbnail(int index) {
     final imageBytes = _imageThumbnails[index];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return GestureDetector(
       onTap: () => _viewImage(index),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.shade300),
+          border: Border.all(
+            color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+          ),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
@@ -563,10 +594,10 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
             imageBytes,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(
-              color: Colors.grey.shade200,
-              child: const Icon(
+              color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+              child: Icon(
                 Icons.broken_image,
-                color: Colors.grey,
+                color: isDark ? Colors.grey.shade500 : Colors.grey,
                 size: 32,
               ),
             ),
@@ -576,15 +607,18 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     );
   }
 
-  /// "+N" 更多图片按钮
   Widget _buildMoreImagesButton(int remaining) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return GestureDetector(
-      onTap: () => _viewImage(8), // 跳转到第9张（索引8）
+      onTap: () => _viewImage(8),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
-          color: Colors.grey.shade200,
-          border: Border.all(color: Colors.grey.shade300),
+          color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+          border: Border.all(
+            color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+          ),
         ),
         child: Center(
           child: Column(
@@ -593,7 +627,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
               Icon(
                 Icons.more_horiz,
                 size: 24,
-                color: Colors.grey.shade600,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
               ),
               const SizedBox(height: 2),
               Text(
@@ -601,7 +635,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade600,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                 ),
               ),
             ],

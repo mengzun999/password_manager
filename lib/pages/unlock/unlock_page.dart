@@ -440,9 +440,12 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     return PopScope(
       canPop: false,
       child: Scaffold(
+        extendBodyBehindAppBar: true,
         appBar: AppBar(
           title: const Text('解锁'),
           automaticallyImplyLeading: false,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
           actions: [
             if (_hasGesture)
               TextButton(

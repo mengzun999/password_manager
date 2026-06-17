@@ -38,7 +38,8 @@ class _MyAppState extends ConsumerState<MyApp> {
     final settingsState = ref.watch(settingsProvider);
 
     return MaterialApp(
-      title: AppConstants.appName,
+      title: '',  // ✅ 改为空字符串，状态栏不显示"密码管家"
+      // title: AppConstants.appName,  // ❌ 注释掉
       theme: ThemeData.light(),
       darkTheme: ThemeData.dark(),
       themeMode: settingsState.themeMode,
@@ -68,7 +69,6 @@ class _MyAppState extends ConsumerState<MyApp> {
       case AppRoutes.setupBiometric:
         return MaterialPageRoute(builder: (_) => const SetupBiometricPage());
 
-    // ✅ 修改：更严谨的参数判断
       case AppRoutes.addEdit:
         final args = settings.arguments;
         if (args == null) {
@@ -80,7 +80,6 @@ class _MyAppState extends ConsumerState<MyApp> {
         if (args is String) {
           return MaterialPageRoute(builder: (_) => AddEditPage(presetTitle: args));
         }
-        // 兜底：未知参数类型
         return MaterialPageRoute(builder: (_) => const AddEditPage());
 
       case AppRoutes.detail:

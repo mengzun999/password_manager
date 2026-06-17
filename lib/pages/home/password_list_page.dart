@@ -38,7 +38,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
     });
   }
 
-  /// 加载保存的按钮位置
   Future<void> _loadFabPosition() async {
     final position = await SharedPrefs.getFabPosition();
     if (position != null) {
@@ -47,12 +46,10 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
         _isPositionLoaded = true;
       });
     } else {
-      // ✅ 如果没有保存的位置，初始化
       _initFabPosition();
     }
   }
 
-  /// ✅ 初始化按钮位置（右下角偏上）并保存
   void _initFabPosition() {
     final screenSize = MediaQuery.of(context).size;
     setState(() {
@@ -62,11 +59,9 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
       );
       _isPositionLoaded = true;
     });
-    // ✅ 保存初始位置，避免下次启动时重新计算
     _saveFabPosition(_fabPosition);
   }
 
-  /// 保存按钮位置
   Future<void> _saveFabPosition(Offset position) async {
     await SharedPrefs.saveFabPosition(position.dx, position.dy);
   }
@@ -89,27 +84,27 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
 
     if (confirmed == true) {
       await ref.read(passwordProvider.notifier).deleteEntry(id);
-      if (!mounted) return;  // ✅ 添加检查
+      if (!mounted) return;
       ToastUtils.showSuccess(context, '已删除');
     }
   }
 
   Future<void> _copyToClipboard(String text, String label) async {
     await Helpers.copyToClipboard(text);
-    if (!mounted) return;  // ✅ 添加检查
+    if (!mounted) return;
     ToastUtils.showSuccess(context, '已复制 $label');
   }
 
   Future<void> _copyPassword(PasswordEntry entry) async {
     final masterKey = ref.read(masterKeyProvider);
     if (masterKey == null) {
-      if (!mounted) return;  // ✅ 添加检查
+      if (!mounted) return;
       ToastUtils.showError(context, '未解锁，请重新登录');
       return;
     }
 
     if (entry.encryptedPassword == null || entry.encryptedPassword!.isEmpty) {
-      if (!mounted) return;  // ✅ 添加检查
+      if (!mounted) return;
       ToastUtils.showError(context, '没有保存密码');
       return;
     }
@@ -117,16 +112,16 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
     try {
       final decrypted = await PasswordHelper.decryptPassword(entry, masterKey);
       if (decrypted == null) {
-        if (!mounted) return;  // ✅ 添加检查
+        if (!mounted) return;
         ToastUtils.showError(context, '解密失败');
         return;
       }
 
       await Helpers.copyToClipboard(decrypted);
-      if (!mounted) return;  // ✅ 添加检查
+      if (!mounted) return;
       ToastUtils.showSuccess(context, '已复制密码');
     } catch (e) {
-      if (!mounted) return;  // ✅ 添加检查
+      if (!mounted) return;
       ToastUtils.showError(context, '解密失败: $e');
     }
   }
@@ -141,6 +136,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
   Widget build(BuildContext context) {
     final passwordState = ref.watch(passwordProvider);
     final masterKey = ref.watch(masterKeyProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final isLoading = passwordState.isLoading;
     final filteredEntries = passwordState.filteredEntries;
@@ -150,6 +146,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
       appBar: AppBar(
         title: const Text('密码管家'),
         centerTitle: false,
+        backgroundColor: isDark ? Colors.grey.shade900 : null,
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -164,13 +161,25 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
             padding: const EdgeInsets.all(8.0),
             child: TextField(
               focusNode: _searchFocusNode,
-              autofocus: false,  // ✅ 禁用自动焦点
+              autofocus: false,
+              style: TextStyle(
+                color: isDark ? Colors.white : Colors.black87,
+              ),
               decoration: InputDecoration(
                 hintText: '搜索标题、用户名或备注...',
-                prefixIcon: const Icon(Icons.search),
+                hintStyle: TextStyle(
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                ),
                 suffixIcon: searchKeyword.isNotEmpty
                     ? IconButton(
-                  icon: const Icon(Icons.clear),
+                  icon: Icon(
+                    Icons.clear,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
                   onPressed: () {
                     ref.read(passwordProvider.notifier).clearSearch();
                   },
@@ -179,10 +188,20 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                    color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                    color: Theme.of(context).primaryColor,
+                  ),
+                ),
                 filled: true,
-                fillColor: Theme.of(context).brightness == Brightness.light
-                    ? Colors.white
-                    : Colors.grey[800],
+                fillColor: isDark ? Colors.grey.shade800 : Colors.white,
                 contentPadding: const EdgeInsets.symmetric(vertical: 0),
               ),
               onChanged: (value) {
@@ -194,7 +213,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
       ),
       body: Stack(
         children: [
-          // 主内容
           isLoading
               ? const Center(child: CircularProgressIndicator())
               : filteredEntries.isEmpty
@@ -209,7 +227,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
               },
             ),
           ),
-          // 可拖动的悬浮按钮
           if (_isPositionLoaded)
             Positioned(
               left: _fabPosition.dx,
@@ -255,6 +272,8 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
   }
 
   Widget _buildEmptyState() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -262,14 +281,14 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
           Icon(
             Icons.lock_outline,
             size: 80,
-            color: Colors.grey[400],
+            color: isDark ? Colors.grey.shade600 : Colors.grey[400],
           ),
           const SizedBox(height: 16),
           Text(
             '还没有任何密码',
             style: TextStyle(
               fontSize: 18,
-              color: Colors.grey[600],
+              color: isDark ? Colors.grey.shade300 : Colors.grey[600],
             ),
           ),
           const SizedBox(height: 8),
@@ -277,7 +296,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
             '点击右下角 + 按钮添加你的第一个密码',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey[500],
+              color: isDark ? Colors.grey.shade500 : Colors.grey[500],
             ),
           ),
         ],
@@ -286,8 +305,18 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
   }
 
   Widget _buildEntryCard(PasswordEntry entry, Uint8List? masterKey) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      color: isDark ? Colors.grey.shade800 : Colors.white,
+      elevation: isDark ? 0 : 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: isDark
+            ? BorderSide(color: Colors.grey.shade700, width: 0.5)
+            : BorderSide.none,
+      ),
       child: InkWell(
         onTap: () {
           Navigator.pushNamed(
@@ -295,7 +324,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
             AppRoutes.detail,
             arguments: entry.id,
           ).then((_) {
-            // ✅ 返回时清除焦点
             if (mounted) {
               _searchFocusNode.unfocus();
               FocusScope.of(context).unfocus();
@@ -314,7 +342,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                  color: Theme.of(context).primaryColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -329,9 +357,10 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                   children: [
                     Text(
                       entry.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.white : Colors.black87,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -342,7 +371,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                         entry.username!,
                         style: TextStyle(
                           fontSize: 13,
-                          color: Colors.grey[600],
+                          color: isDark ? Colors.grey.shade400 : Colors.grey[600],
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -351,7 +380,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                       Helpers.formatDate(entry.updatedAt),
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.grey[500],
+                        color: isDark ? Colors.grey.shade500 : Colors.grey[500],
                       ),
                     ),
                   ],
@@ -362,12 +391,20 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                 children: [
                   if (entry.username != null && entry.username!.isNotEmpty)
                     IconButton(
-                      icon: const Icon(Icons.person_outline, size: 20),
+                      icon: Icon(
+                        Icons.person_outline,
+                        size: 20,
+                        color: isDark ? Colors.grey.shade400 : Colors.grey[600],
+                      ),
                       onPressed: () => _copyToClipboard(entry.username!, '用户名'),
                       tooltip: '复制用户名',
                     ),
                   IconButton(
-                    icon: const Icon(Icons.copy, size: 20),
+                    icon: Icon(
+                      Icons.copy,
+                      size: 20,
+                      color: isDark ? Colors.grey.shade400 : Colors.grey[600],
+                    ),
                     onPressed: () {
                       _copyPassword(entry);
                     },
@@ -383,15 +420,24 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
   }
 
   void _showBottomSheet(PasswordEntry entry, Uint8List? masterKey) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     showModalBottomSheet(
       context: context,
+      backgroundColor: isDark ? Colors.grey.shade800 : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.edit),
-              title: const Text('编辑'),
+              leading: Icon(Icons.edit, color: isDark ? Colors.white : null),
+              title: Text(
+                '编辑',
+                style: TextStyle(color: isDark ? Colors.white : null),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(
@@ -405,24 +451,33 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
             ),
             if (entry.username != null && entry.username!.isNotEmpty)
               ListTile(
-                leading: const Icon(Icons.copy),
-                title: const Text('复制用户名'),
+                leading: Icon(Icons.copy, color: isDark ? Colors.white : null),
+                title: Text(
+                  '复制用户名',
+                  style: TextStyle(color: isDark ? Colors.white : null),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   _copyToClipboard(entry.username!, '用户名');
                 },
               ),
             ListTile(
-              leading: const Icon(Icons.copy),
-              title: const Text('复制密码'),
+              leading: Icon(Icons.copy, color: isDark ? Colors.white : null),
+              title: Text(
+                '复制密码',
+                style: TextStyle(color: isDark ? Colors.white : null),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 _copyPassword(entry);
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete),
-              title: const Text('删除'),
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text(
+                '删除',
+                style: TextStyle(color: Colors.red),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 _deleteEntry(entry.id, entry.title);

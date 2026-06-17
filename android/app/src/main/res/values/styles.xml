@@ -1,9 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="NormalTheme" parent="@android:style/Theme.Light">
-        <item name="android:windowBackground">?android:colorBackground</item>
+    <!-- 防截屏主题 -->
+    <style name="PreventScreenshotTheme" parent="@style/Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowShowWallpaper">false</item>
+        <item name="android:windowNoTitle">true</item>
+
+        <!-- ✅ 添加这两行 -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
-    <style name="PreventScreenshotTheme" parent="NormalTheme">
+    <!-- Flutter 正常主题 -->
+    <style name="NormalTheme" parent="@style/Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+
+        <!-- ✅ 添加这两行 -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 </resources>
