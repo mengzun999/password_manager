@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -247,41 +246,62 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     final controller = TextEditingController();
     showDialog(
       context: context,
-      barrierDismissible: true,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('使用恢复密钥'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '输入128位恢复密钥解锁应用',
-              style: TextStyle(fontSize: 14),
+        title: const Text('使用恢复密钥', style: TextStyle(fontSize: 16)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '输入128位恢复密钥解锁应用',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  '（首次设置时抄写的128位十六进制字符串）',
+                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    hintText: '输入恢复密钥...',
+                    hintStyle: TextStyle(fontSize: 12),
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    isDense: true,
+                  ),
+                  maxLines: 2,
+                  minLines: 1,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                hintText: '输入恢复密钥...',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-          ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('取消', style: TextStyle(fontSize: 14)),
           ),
           TextButton(
             onPressed: () => _unlockWithRecoveryKey(controller.text),
             style: TextButton.styleFrom(
               foregroundColor: Colors.orange,
+              visualDensity: VisualDensity.compact,
             ),
-            child: const Text('解锁'),
+            child: const Text('解锁', style: TextStyle(fontSize: 14)),
           ),
         ],
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       ),
     );
   }
@@ -430,13 +450,10 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
   Widget build(BuildContext context) {
     if (_isChecking) {
       return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    // ✅ 使用 PopScope 直接包裹
     return PopScope(
       canPop: false,
       child: Scaffold(
@@ -455,20 +472,24 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
           ],
         ),
         body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.lock,
-                  size: 80,
-                  color: Colors.grey[400],
-                ),
-                const SizedBox(height: 40),
-                _unlockMode == 0 ? _buildPasswordInput() : _buildGestureInput(),
-                const SizedBox(height: 40),
-              ],
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.lock,
+                    size: 60,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 24),
+                  _unlockMode == 0
+                      ? _buildPasswordInput()
+                      : _buildGestureInput(),
+                ],
+              ),
             ),
           ),
         ),
@@ -478,6 +499,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
   Widget _buildPasswordInput() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         TextField(
           controller: _passwordController,
@@ -502,49 +524,47 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
           ),
         ),
         if (_error != null) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           Text(_error!, style: const TextStyle(color: Colors.red)),
         ],
-        const SizedBox(height: 32),
+        const SizedBox(height: 20),
         SizedBox(
           width: double.infinity,
-          height: 50,
+          height: 48,
           child: ElevatedButton(
             onPressed: _isLoading ? null : _handleUnlock,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).primaryColor,
+              // ✅ 暗黑模式下使用更亮的颜色
+              backgroundColor: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.purple.shade400  // 暗黑模式下亮蓝色
+                  : Theme.of(context).primaryColor,  // 亮色模式下用主题色
               foregroundColor: Colors.white,
+              elevation: 2,
+              shadowColor: Colors.black.withValues(alpha: 0.3),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: _isLoading
-                ? const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                ),
-                SizedBox(width: 12),
-                Text(
-                  '验证中...',
-                  style: TextStyle(fontSize: 16, color: Colors.white),
-                ),
-              ],
+                ? const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
             )
                 : const Text('解锁', style: TextStyle(fontSize: 16)),
           ),
         ),
         if (_showForgotPassword) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           TextButton(
             onPressed: _showRecoveryDialog,
             child: Text(
               '忘记主密码？',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 color: Colors.orange.shade600,
                 fontWeight: FontWeight.w500,
               ),
@@ -557,6 +577,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
   Widget _buildGestureInput() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           padding: const EdgeInsets.all(12),
@@ -586,7 +607,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
           ),
         ),
         if (_error != null) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Text(_error!, style: const TextStyle(color: Colors.red)),
         ],
       ],

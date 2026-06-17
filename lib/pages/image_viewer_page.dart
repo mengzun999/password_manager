@@ -16,8 +16,8 @@ class ImageViewerPage extends ConsumerStatefulWidget {
   final int initialIndex;
   final String entryId;
 
-  /// ✅ 新增：缓存的原图
-  final Map<int, Uint8List>? cachedImages;
+  /// ✅ 已经加载好的原图（从详情页传入）
+  final Uint8List? preloadedImage;
 
   const ImageViewerPage({
     super.key,
@@ -25,7 +25,7 @@ class ImageViewerPage extends ConsumerStatefulWidget {
     required this.thumbnails,
     this.initialIndex = 0,
     required this.entryId,
-    this.cachedImages,
+    this.preloadedImage,
   });
 
   @override
@@ -43,18 +43,20 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
     super.initState();
     _currentIndex = widget.initialIndex.clamp(0, widget.imageModels.length - 1);
 
-    // ✅ 如果有缓存，直接使用
-    if (widget.cachedImages != null) {
-      _imageCache.addAll(widget.cachedImages!);
-      for (final key in _imageCache.keys) {
-        _loadedMap[key] = true;
-      }
-    }
-
-    // 如果当前图片未缓存，加载
-    if (_loadedMap[_currentIndex] != true) {
+    // ✅ 如果有预加载的图片，直接使用
+    if (widget.preloadedImage != null) {
+      _imageCache[_currentIndex] = widget.preloadedImage!;
+      _loadedMap[_currentIndex] = true;
+    } else {
       _loadFullImage(_currentIndex);
     }
+  }
+
+  @override
+  void dispose() {
+    _imageCache.clear();
+    _loadedMap.clear();
+    super.dispose();
   }
 
   Future<void> _loadFullImage(int index) async {
@@ -68,8 +70,9 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
     try {
       final masterKey = ref.read(masterKeyProvider);
       if (masterKey == null) {
-        if (!mounted) return;
-        setState(() => _isLoading = false);
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
         return;
       }
 
@@ -100,12 +103,10 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
       _currentIndex = index;
     });
 
-    // ✅ 加载当前图片
     if (_loadedMap[index] != true) {
       _loadFullImage(index);
     }
 
-    // 预加载前后图片
     if (index > 0 && _loadedMap[index - 1] != true) {
       _loadFullImage(index - 1);
     }
@@ -167,66 +168,62 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          PageView.builder(
-            onPageChanged: _onPageChanged,
-            controller: PageController(initialPage: _currentIndex),
-            itemCount: total,
-            itemBuilder: (context, index) {
-              final hasFullImage = _loadedMap[index] == true &&
-                  _imageCache.containsKey(index);
+      body: PageView.builder(
+        onPageChanged: _onPageChanged,
+        controller: PageController(initialPage: _currentIndex),
+        itemCount: total,
+        itemBuilder: (context, index) {
+          final hasFullImage = _loadedMap[index] == true &&
+              _imageCache.containsKey(index);
 
-              Uint8List? imageBytes;
+          Uint8List? imageBytes;
 
-              if (hasFullImage) {
-                imageBytes = _imageCache[index];
-              } else if (index < widget.thumbnails.length) {
-                imageBytes = widget.thumbnails[index];
-              }
+          if (hasFullImage) {
+            imageBytes = _imageCache[index];
+          } else if (index < widget.thumbnails.length) {
+            imageBytes = widget.thumbnails[index];
+          }
 
-              final isLoading = _isLoading &&
-                  _loadedMap[index] != true &&
-                  index == _currentIndex;
+          final isLoading = _isLoading &&
+              _loadedMap[index] != true &&
+              index == _currentIndex;
 
-              if (imageBytes == null) {
-                return Center(
-                  child: isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Icon(
-                    Icons.broken_image,
-                    color: Colors.grey,
-                    size: 64,
-                  ),
-                );
-              }
+          if (imageBytes == null) {
+            return Center(
+              child: isLoading
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Icon(
+                Icons.broken_image,
+                color: Colors.grey,
+                size: 64,
+              ),
+            );
+          }
 
-              return PhotoView(
-                imageProvider: MemoryImage(imageBytes),
-                backgroundDecoration: const BoxDecoration(color: Colors.black),
-                minScale: PhotoViewComputedScale.contained,
-                maxScale: PhotoViewComputedScale.covered * 2,
-                gestureDetectorBehavior: HitTestBehavior.opaque,
-                loadingBuilder: (context, progress) => Center(
-                  child: CircularProgressIndicator(
-                    value: progress == null
-                        ? null
-                        : progress.cumulativeBytesLoaded /
-                        progress.expectedTotalBytes!,
-                    color: Colors.white,
-                  ),
-                ),
-                errorBuilder: (context, error, stackTrace) => const Center(
-                  child: Icon(
-                    Icons.broken_image,
-                    color: Colors.grey,
-                    size: 64,
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
+          return PhotoView(
+            imageProvider: MemoryImage(imageBytes),
+            backgroundDecoration: const BoxDecoration(color: Colors.black),
+            minScale: PhotoViewComputedScale.contained,
+            maxScale: PhotoViewComputedScale.covered * 2,
+            gestureDetectorBehavior: HitTestBehavior.opaque,
+            loadingBuilder: (context, progress) => Center(
+              child: CircularProgressIndicator(
+                value: progress == null
+                    ? null
+                    : progress.cumulativeBytesLoaded /
+                    progress.expectedTotalBytes!,
+                color: Colors.white,
+              ),
+            ),
+            errorBuilder: (context, error, stackTrace) => const Center(
+              child: Icon(
+                Icons.broken_image,
+                color: Colors.grey,
+                size: 64,
+              ),
+            ),
+          );
+        },
       ),
     );
   }

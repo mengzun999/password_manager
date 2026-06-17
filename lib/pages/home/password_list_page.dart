@@ -259,7 +259,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                 },
                 child: FloatingActionButton(
                   onPressed: _isDragging ? null : _goToAddEdit,
-                  backgroundColor: Theme.of(context).primaryColor,
+                  backgroundColor: isDark ? Colors.purple.shade400 : Theme.of(context).primaryColor,
                   foregroundColor: Colors.white,
                   tooltip: '添加密码',
                   child: const Icon(Icons.add),

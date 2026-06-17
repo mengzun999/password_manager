@@ -7,6 +7,7 @@ import 'package:password_manager/core/models/password_entry.dart';
 import 'package:password_manager/core/models/image_model.dart';
 import 'package:password_manager/core/services/image_service.dart';
 import 'package:password_manager/core/storage/database.dart';
+import 'package:password_manager/core/storage/shared_prefs.dart';
 import 'package:password_manager/providers/auth_provider.dart';
 import 'package:password_manager/utils/helpers.dart';
 import 'package:password_manager/widgets/password_generator_button.dart';
@@ -15,9 +16,6 @@ import 'package:photo_view/photo_view.dart';
 import '../../utils/toast_utils.dart';
 
 /// 添加/编辑密码页面
-///
-/// 密码和图片互不依赖，可单独存在，也可组合
-/// 保存条件：标题必填 + (密码 或 图片 至少有一个)
 class AddEditPage extends ConsumerStatefulWidget {
   final PasswordEntry? entry;
   final String? presetTitle;
@@ -28,7 +26,7 @@ class AddEditPage extends ConsumerStatefulWidget {
   ConsumerState<AddEditPage> createState() => _AddEditPageState();
 }
 
-class _AddEditPageState extends ConsumerState<AddEditPage> {
+class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingObserver {
   // ========== 控制器 ==========
   final _titleController = TextEditingController();
   final _usernameController = TextEditingController();
@@ -40,8 +38,16 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
   bool _isLoading = false;
   String? _error;
 
+  // ========== 悬浮球位置 ==========
+  Offset _fabPosition = const Offset(0, 0);
+  bool _isDragging = false;
+  bool _isPositionLoaded = false;
+  bool _isKeyboardVisible = false;
+
   // ========== 图片：待保存（内存中） ==========
   final List<XFile> _pendingImages = [];
+  // ✅ 缓存待保存图片的缩略图
+  final List<Uint8List> _pendingThumbnails = [];
 
   // ========== 图片：已保存（编辑模式） ==========
   List<ImageModel> _savedImageModels = [];
@@ -53,19 +59,66 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadEntryData();
     if (widget.entry != null) {
       _loadSavedImages();
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadFabPosition();
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _titleController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    final view = View.of(context);
+    final bottomInset = view.viewInsets.bottom;
+    final isKeyboardVisible = bottomInset > 0;
+    if (_isKeyboardVisible != isKeyboardVisible) {
+      setState(() {
+        _isKeyboardVisible = isKeyboardVisible;
+      });
+    }
+  }
+
+  // ========== 悬浮球位置 ==========
+
+  Future<void> _loadFabPosition() async {
+    final position = await SharedPrefs.getFabPosition();
+    if (position != null) {
+      setState(() {
+        _fabPosition = position;
+        _isPositionLoaded = true;
+      });
+    } else {
+      _initFabPosition();
+    }
+  }
+
+  void _initFabPosition() {
+    final screenSize = MediaQuery.of(context).size;
+    setState(() {
+      _fabPosition = Offset(
+        screenSize.width - 80,
+        screenSize.height * 0.75,
+      );
+      _isPositionLoaded = true;
+    });
+    _saveFabPosition(_fabPosition);
+  }
+
+  Future<void> _saveFabPosition(Offset position) async {
+    await SharedPrefs.saveFabPosition(position.dx, position.dy);
   }
 
   // ========== 数据加载 ==========
@@ -126,8 +179,21 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
     final maxCount = 20 - totalCount;
     final picked = await ImageService.pickImages(maxCount: maxCount);
     if (picked.isNotEmpty) {
+      // ✅ 立即生成缩略图并缓存
+      final thumbnails = <Uint8List>[];
+      for (final file in picked) {
+        try {
+          final bytes = await file.readAsBytes();
+          final thumb = await ImageService.generateThumbnail(bytes);
+          thumbnails.add(thumb);
+        } catch (e) {
+          thumbnails.add(Uint8List(0));
+        }
+      }
+
       setState(() {
         _pendingImages.addAll(picked);
+        _pendingThumbnails.addAll(thumbnails);
       });
       _showSnackBar('已选择 ${picked.length} 张图片，点击保存后上传');
     }
@@ -143,22 +209,20 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
 
     final photo = await ImageService.takePhoto();
     if (photo != null) {
+      // ✅ 立即生成缩略图并缓存
+      Uint8List thumb = Uint8List(0);
+      try {
+        final bytes = await photo.readAsBytes();
+        thumb = await ImageService.generateThumbnail(bytes);
+      } catch (e) {
+        // ignore
+      }
+
       setState(() {
         _pendingImages.add(photo);
+        _pendingThumbnails.add(thumb);
       });
       _showSnackBar('已拍照，点击保存后上传');
-    }
-  }
-
-
-  /// 获取待保存图片的缩略图
-  Future<Uint8List> _getPendingThumbnail(XFile file) async {
-    try {
-      final bytes = await file.readAsBytes();
-      // ✅ 生成缩略图，减少内存占用
-      return await ImageService.generateThumbnail(bytes);
-    } catch (e) {
-      return Uint8List(0);
     }
   }
 
@@ -166,6 +230,7 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
   void _deletePendingImage(int index) {
     setState(() {
       _pendingImages.removeAt(index);
+      _pendingThumbnails.removeAt(index);
     });
     _showSnackBar('已移除');
   }
@@ -235,7 +300,6 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
       final bytes = await _pendingImages[index].readAsBytes();
       if (!mounted) return;
 
-      // ✅ 使用 PhotoView 安全显示大图
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -307,9 +371,40 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
       _error = null;
     });
 
+    // ✅ 显示加载对话框（透明背景转圈，无文字）
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.3),
+      builder: (context) => Center(
+        child: Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Center(
+            child: SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // ✅ 让 UI 先渲染
+    await Future.delayed(Duration.zero);
+
     final now = Helpers.currentTimestamp();
     final masterKey = _getMasterKey();
     if (masterKey == null) {
+      if (mounted) Navigator.pop(context);
       setState(() {
         _isLoading = false;
         _error = '未解锁，请重新登录';
@@ -338,17 +433,19 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
         );
         await DatabaseHelper.updateEntry(updatedEntry);
 
-        // 5. 保存待保存的图片（关联到已有条目）
+        // 5. ✅ 保存图片（使用 isolate 版本，不会卡 UI）
         if (_pendingImages.isNotEmpty) {
           final savedImages = await ImageService.saveImages(
             imageFiles: _pendingImages,
             entryId: widget.entry!.id,
             masterKey: masterKey,
           );
-          _showSnackBar('已保存 ${savedImages.length} 张图片');
+          // ✅ 清空待保存列表和缓存
           _pendingImages.clear();
+          _pendingThumbnails.clear();
         }
 
+        if (mounted) Navigator.pop(context);
         setState(() => _isLoading = false);
         if (mounted) {
           Navigator.pop(context, true);
@@ -371,22 +468,25 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
       );
       await DatabaseHelper.insertEntry(entry);
 
-      // 7. 保存图片（如果有）
+      // 7. ✅ 保存图片（使用 isolate 版本）
       if (_pendingImages.isNotEmpty) {
         final savedImages = await ImageService.saveImages(
           imageFiles: _pendingImages,
           entryId: entry.id,
           masterKey: masterKey,
         );
-        _showSnackBar('已保存 ${savedImages.length} 张图片');
+        // ✅ 清空待保存列表和缓存
         _pendingImages.clear();
+        _pendingThumbnails.clear();
       }
 
+      if (mounted) Navigator.pop(context);
       setState(() => _isLoading = false);
       if (mounted) {
         Navigator.pop(context, true);
       }
     } catch (e) {
+      if (mounted) Navigator.pop(context);
       setState(() {
         _isLoading = false;
         _error = '保存失败: $e';
@@ -411,6 +511,7 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
   @override
   Widget build(BuildContext context) {
     final isEditMode = widget.entry != null;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // 合并图片数量
     final allImageCount = _savedImageModels.length + _pendingImages.length;
@@ -493,8 +594,8 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
                   const SizedBox(height: 8),
                 ],
 
-                // 待保存的图片
-                if (_pendingImages.isNotEmpty) ...[
+                // ✅ 待保存的图片（使用缓存的缩略图）
+                if (_pendingThumbnails.isNotEmpty) ...[
                   _buildPendingImagesSection(),
                   const SizedBox(height: 8),
                 ],
@@ -505,7 +606,7 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
                 const SizedBox(height: 8),
                 Text(
                   '${allImageCount}/20 张',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                  style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade500),
                 ),
                 const SizedBox(height: 8),
 
@@ -520,15 +621,44 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
             ),
           ),
 
-          // 悬浮球
-          Positioned(
-            bottom: 80,
-            right: 16,
-            child: PasswordGeneratorButton(
-              onGenerate: _generatePassword,
-              onClear: _clearPassword,
+          // ✅ 悬浮球 - 键盘弹出时隐藏，支持拖动
+          if (_isPositionLoaded && !_isKeyboardVisible)
+            Positioned(
+              left: _fabPosition.dx,
+              top: _fabPosition.dy,
+              child: GestureDetector(
+                onPanStart: (_) {
+                  setState(() => _isDragging = true);
+                },
+                onPanUpdate: (details) {
+                  final screenSize = MediaQuery.of(context).size;
+                  final buttonSize = 56.0;
+                  final padding = 16.0;
+
+                  double newDx = _fabPosition.dx + details.delta.dx;
+                  double newDy = _fabPosition.dy + details.delta.dy;
+
+                  newDx = newDx.clamp(padding, screenSize.width - buttonSize - padding);
+                  newDy = newDy.clamp(
+                    padding + kToolbarHeight,
+                    screenSize.height - buttonSize - padding - 80,
+                  );
+
+                  setState(() {
+                    _fabPosition = Offset(newDx, newDy);
+                  });
+                },
+                onPanEnd: (_) {
+                  setState(() => _isDragging = false);
+                  _saveFabPosition(_fabPosition);
+                },
+                child: PasswordGeneratorButton(
+                  onGenerate: _generatePassword,
+                  onClear: _clearPassword,
+                  isDark: isDark,
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -538,12 +668,17 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
 
   /// 已保存图片区域
   Widget _buildSavedImagesSection() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           '已保存图片（${_savedImageThumbnails.length}张）',
-          style: TextStyle(fontSize: 13, color: Colors.green.shade700),
+          style: TextStyle(
+            fontSize: 13,
+            color: isDark ? Colors.green.shade300 : Colors.green.shade700,
+          ),
         ),
         const SizedBox(height: 4),
         GridView.builder(
@@ -567,8 +702,8 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
                       _savedImageThumbnails[index],
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
-                        color: Colors.grey.shade200,
-                        child: const Icon(Icons.broken_image, color: Colors.grey),
+                        color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+                        child: Icon(Icons.broken_image, color: isDark ? Colors.grey.shade500 : Colors.grey),
                       ),
                     ),
                   ),
@@ -611,14 +746,19 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
     );
   }
 
-  /// 待保存图片区域
+  /// ✅ 待保存图片区域（使用缓存的缩略图）
   Widget _buildPendingImagesSection() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '待保存图片（${_pendingImages.length}张）',
-          style: TextStyle(fontSize: 13, color: Colors.orange.shade700),
+          '待保存图片（${_pendingThumbnails.length}张）',
+          style: TextStyle(
+            fontSize: 13,
+            color: isDark ? Colors.orange.shade300 : Colors.orange.shade700,
+          ),
         ),
         const SizedBox(height: 4),
         GridView.builder(
@@ -630,59 +770,54 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
             mainAxisSpacing: 8,
             childAspectRatio: 1,
           ),
-          itemCount: _pendingImages.length,
+          itemCount: _pendingThumbnails.length,
           itemBuilder: (context, index) {
-            return FutureBuilder<Uint8List>(
-              future: _getPendingThumbnail(_pendingImages[index]),
-              builder: (context, snapshot) {
-                final bytes = snapshot.data;
-                return Stack(
-                  children: [
-                    GestureDetector(
-                      onTap: () => _viewPendingImage(index),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: bytes != null && bytes.isNotEmpty
-                            ? Image.memory(bytes, fit: BoxFit.cover)
-                            : Container(
-                          color: Colors.grey.shade200,
-                          child: const Icon(Icons.image, color: Colors.grey),
-                        ),
-                      ),
+            final bytes = _pendingThumbnails[index];
+            return Stack(
+              children: [
+                GestureDetector(
+                  onTap: () => _viewPendingImage(index),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: bytes.isNotEmpty
+                        ? Image.memory(bytes, fit: BoxFit.cover)
+                        : Container(
+                      color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+                      child: Icon(Icons.image, color: isDark ? Colors.grey.shade500 : Colors.grey),
                     ),
-                    Positioned(
-                      top: 2,
-                      right: 2,
-                      child: GestureDetector(
-                        onTap: () => _deletePendingImage(index),
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.6),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.close, size: 16, color: Colors.white),
-                        ),
+                  ),
+                ),
+                Positioned(
+                  top: 2,
+                  right: 2,
+                  child: GestureDetector(
+                    onTap: () => _deletePendingImage(index),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        shape: BoxShape.circle,
                       ),
+                      child: const Icon(Icons.close, size: 16, color: Colors.white),
                     ),
-                    Positioned(
-                      bottom: 4,
-                      left: 4,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withValues(alpha: 0.7),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          '待保存',
-                          style: TextStyle(fontSize: 9, color: Colors.white),
-                        ),
-                      ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 4,
+                  left: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(4),
                     ),
-                  ],
-                );
-              },
+                    child: Text(
+                      '待保存',
+                      style: TextStyle(fontSize: 9, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
             );
           },
         ),
@@ -693,6 +828,7 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
   /// 添加图片按钮
   Widget _buildAddImageButtons() {
     final totalCount = _savedImageModels.length + _pendingImages.length;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Row(
       children: [
@@ -700,7 +836,12 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
           child: OutlinedButton.icon(
             onPressed: totalCount >= 20 ? null : _pickFromGallery,
             icon: const Icon(Icons.photo_library, size: 20),
-            label: const Text('从相册选择'),  // ✅ 修改文本
+            label: const Text('从相册选择'),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(
+                color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 8),
@@ -709,6 +850,11 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
             onPressed: totalCount >= 20 ? null : _takePhotoAndAdd,
             icon: const Icon(Icons.camera_alt, size: 20),
             label: const Text('拍照'),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(
+                color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+              ),
+            ),
           ),
         ),
       ],

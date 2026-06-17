@@ -203,6 +203,7 @@ class _SetupBiometricContentState
               ),
               const SizedBox(height: 16),
             ],
+            // ✅ 录制指纹按钮（仅设备支持时显示）
             if (_isFingerprintAvailable) ...[
               SizedBox(
                 width: double.infinity,
@@ -232,24 +233,24 @@ class _SetupBiometricContentState
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
             ],
-            if (!_isFingerprintAvailable) ...[
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _skip,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).primaryColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+            // ✅ 跳过按钮 - 始终显示
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton(
+                onPressed: _skip,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.grey.shade600,
+                  side: BorderSide(color: Colors.grey.shade300),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text('继续', style: TextStyle(fontSize: 16)),
                 ),
+                child: const Text('跳过', style: TextStyle(fontSize: 16)),
               ),
-            ],
+            ),
             const SizedBox(height: 20),
           ],
         ),

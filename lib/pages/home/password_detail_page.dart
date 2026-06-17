@@ -37,12 +37,20 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
   List<Uint8List> _imageThumbnails = [];
   bool _isLoadingImages = false;
 
+  // ✅ 点击图片加载状态
+  bool _isLoadingFullImage = false;
+
   // ========== 生命周期方法 ==========
 
   @override
   void initState() {
     super.initState();
     _loadEntry();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 
   // ========== 数据加载方法 ==========
@@ -174,23 +182,57 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     }
   }
 
-  void _viewImage(int index) {
+  // ✅ 点击缩略图：先显示转圈，异步加载原图，加载完成后自动进入查看器
+  void _viewImage(int index) async {
     if (index >= _imageThumbnails.length) return;
     if (_entry == null) return;
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ImageViewerPage(
-          imageModels: _imageModels,
-          thumbnails: _imageThumbnails,
-          initialIndex: index,
-          entryId: _entry!.id,
+    final masterKey = _getMasterKey();
+    if (masterKey == null) {
+      ToastUtils.showError(context, '未解锁，请重新登录');
+      return;
+    }
+
+    // ✅ 先显示转圈（不阻塞UI）
+    setState(() => _isLoadingFullImage = true);
+
+    // ✅ 让UI先渲染转圈，再执行加载（使用 Future.delayed 确保 UI 更新）
+    await Future.delayed(Duration.zero);
+
+    Uint8List? fullImage;
+    try {
+      final imageModel = _imageModels[index];
+      fullImage = await ImageService.getImage(imageModel, masterKey);
+    } catch (e) {
+      // 加载失败
+    }
+
+    // ✅ 无论成功失败，先隐藏转圈
+    if (mounted) {
+      setState(() => _isLoadingFullImage = false);
+    }
+
+    // ✅ 如果加载成功，进入查看器
+    if (fullImage != null && mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ImageViewerPage(
+            imageModels: _imageModels,
+            thumbnails: _imageThumbnails,
+            initialIndex: index,
+            entryId: _entry!.id,
+            preloadedImage: fullImage,
+          ),
         ),
-      ),
-    ).then((_) {
-      _loadImages();
-    });
+      ).then((_) {
+        if (mounted) {
+          _loadImages();
+        }
+      });
+    } else if (mounted) {
+      ToastUtils.showError(context, '加载图片失败，请重试');
+    }
   }
 
   // ========== 界面构建 ==========
@@ -227,7 +269,26 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
           ? const Center(child: CircularProgressIndicator())
           : _entry == null
           ? _buildErrorState()
-          : _buildContent(),
+          : Stack(
+        children: [
+          _buildContent(),
+          // ✅ 加载转圈（覆盖整个页面）
+          if (_isLoadingFullImage)
+            Container(
+              color: Colors.black.withValues(alpha: 0.5),
+              child: const Center(
+                child: SizedBox(
+                  width: 50,
+                  height: 50,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
