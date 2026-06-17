@@ -41,7 +41,7 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
   // ========== 悬浮球位置 ==========
   Offset _fabPosition = const Offset(0, 0);
   bool _isDragging = false;
-  bool _isPositionLoaded = false;
+  bool _isPositionLoaded = true;
   bool _isKeyboardVisible = false;
 
   // ========== 图片：待保存（内存中） ==========

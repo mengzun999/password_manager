@@ -182,7 +182,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     }
   }
 
-  // ✅ 点击缩略图：先显示转圈，异步加载原图，加载完成后自动进入查看器
+  // ✅ 点击缩略图：先显示转圈，在 isolate 中加载原图
   void _viewImage(int index) async {
     if (index >= _imageThumbnails.length) return;
     if (_entry == null) return;
@@ -196,18 +196,14 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     // ✅ 先显示转圈（不阻塞UI）
     setState(() => _isLoadingFullImage = true);
 
-    // ✅ 让UI先渲染转圈，再执行加载（使用 Future.delayed 确保 UI 更新）
+    // ✅ 让UI先渲染转圈
     await Future.delayed(Duration.zero);
 
-    Uint8List? fullImage;
-    try {
-      final imageModel = _imageModels[index];
-      fullImage = await ImageService.getImage(imageModel, masterKey);
-    } catch (e) {
-      // 加载失败
-    }
+    // ✅ 在 isolate 中加载原图（不阻塞 UI）
+    final imageModel = _imageModels[index];
+    final fullImage = await ImageService.loadImageInIsolate(imageModel, masterKey);
 
-    // ✅ 无论成功失败，先隐藏转圈
+    // ✅ 隐藏转圈
     if (mounted) {
       setState(() => _isLoadingFullImage = false);
     }

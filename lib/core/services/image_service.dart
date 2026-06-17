@@ -43,12 +43,23 @@ class _SingleImageResult {
   });
 }
 
-/// ✅ 批量解密缩略图参数
+/// 批量解密缩略图参数
 class _DecryptThumbnailsParams {
   final List<Uint8List> encryptedData;
   final Uint8List masterKey;
 
   _DecryptThumbnailsParams({
+    required this.encryptedData,
+    required this.masterKey,
+  });
+}
+
+/// ✅ 解密图片参数
+class _DecryptImageParams {
+  final Uint8List encryptedData;
+  final Uint8List masterKey;
+
+  _DecryptImageParams({
     required this.encryptedData,
     required this.masterKey,
   });
@@ -184,6 +195,15 @@ class ImageService {
     return results;
   }
 
+  /// ✅ 在 isolate 中解密图片
+  static Uint8List _decryptImageInIsolate(_DecryptImageParams params) {
+    try {
+      return AESGCMHelper.decryptBytesSync(params.encryptedData, params.masterKey);
+    } catch (e) {
+      return Uint8List(0);
+    }
+  }
+
   /// 同步生成缩略图（供 isolate 使用）
   static Uint8List _generateThumbnailSync(Uint8List originalBytes) {
     try {
@@ -286,7 +306,7 @@ class ImageService {
     }
   }
 
-  /// 获取图片
+  /// 获取图片（直接解密，用于查看器内部加载）
   static Future<Uint8List?> getImage(ImageModel image, Uint8List masterKey) async {
     try {
       final imagesDir = await _getImagesDir();
@@ -296,6 +316,35 @@ class ImageService {
 
       final encryptedBytes = await imageFile.readAsBytes();
       final decryptedBytes = await AESGCMHelper.decryptBytes(encryptedBytes, masterKey);
+      return decryptedBytes;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// ✅ 在 isolate 中加载原图（不阻塞 UI）
+  static Future<Uint8List?> loadImageInIsolate(
+      ImageModel image,
+      Uint8List masterKey,
+      ) async {
+    try {
+      final imagesDir = await _getImagesDir();
+      final imageFile = File('${imagesDir.path}/${image.filename}');
+
+      if (!await imageFile.exists()) return null;
+
+      final encryptedBytes = await imageFile.readAsBytes();
+
+      final decryptedBytes = await compute(
+        _decryptImageInIsolate,
+        _DecryptImageParams(
+          encryptedData: encryptedBytes,
+          masterKey: masterKey,
+        ),
+      );
+
+      // 如果解密结果为空，返回 null
+      if (decryptedBytes.isEmpty) return null;
       return decryptedBytes;
     } catch (e) {
       return null;
@@ -318,7 +367,7 @@ class ImageService {
     }
   }
 
-  /// ✅ 批量获取缩略图（使用 isolate）
+  /// 批量获取缩略图（使用 isolate）
   static Future<List<Uint8List>> getThumbnailsBatch(
       List<ImageModel> images,
       Uint8List masterKey,
