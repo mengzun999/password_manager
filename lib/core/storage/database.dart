@@ -147,12 +147,10 @@ class DatabaseHelper {
   // 2. 删除图片文件夹
   static Future<void> clearAllData() async {
     final db = await database;
-    // 删除所有密码记录（图片表会因为外键级联自动清空）
     await db.delete('entries');
 
-    // 删除图片文件夹
-    final documentsDir = await getApplicationDocumentsDirectory();
-    final imagesDir = Directory(join(documentsDir.path, 'images'));
+    final supportDir = await getApplicationSupportDirectory();
+    final imagesDir = Directory(join(supportDir.path, 'images'));
     if (await imagesDir.exists()) {
       await imagesDir.delete(recursive: true);
     }

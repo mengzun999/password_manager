@@ -50,7 +50,15 @@ class Helpers {
   }
 
   static Future<void> copyToClipboard(String text) async {
-    await Clipboard.setData(ClipboardData(text: text));
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+      // 这里可以加一个成功提示，你的项目里是用 ToastUtils
+      // ToastUtils.showSuccess(context, '已复制到剪贴板');
+    } on PlatformException catch (e) {
+      // 如果复制失败，可以在这里处理，比如打印日志或提示用户
+      print('复制失败: $e');
+      // ToastUtils.showError(context, '复制失败，请检查权限');
+    }
   }
 
   /// 从剪贴板读取文本

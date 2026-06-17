@@ -1,5 +1,6 @@
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 /// 生物识别服务类
 /// 负责指纹、人脸等生物识别验证
@@ -44,17 +45,17 @@ class BiometricService {
   }
 
   /// 进行生物识别验证
+  /// 进行生物识别验证
   static Future<bool> authenticate({required String reason}) async {
     try {
-      // ✅ 只使用 currentVersion 支持的参数
       final isAuthenticated = await _localAuth.authenticate(
         localizedReason: reason,
-        biometricOnly: true,  // 3.0.1 支持
-        // stickyAuth 在 4.0.0 才支持，移除
+        biometricOnly: true,
+        persistAcrossBackgrounding: true,  // 原 stickyAuth
       );
       return isAuthenticated;
     } catch (e) {
-      print('Authentication error: $e');
+      debugPrint('Authentication error: $e');
       return false;
     }
   }

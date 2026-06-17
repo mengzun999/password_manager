@@ -13,6 +13,7 @@ import 'package:password_manager/constants/app_constants.dart';
 import 'package:password_manager/utils/toast_utils.dart';
 import 'package:password_manager/widgets/gesture_pattern_view.dart';
 
+
 /// 解锁页面
 class UnlockPage extends ConsumerStatefulWidget {
   const UnlockPage({super.key});
@@ -126,6 +127,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       final authNotifier = ref.read(authProvider.notifier);
       authNotifier.unlock(masterKey: masterKey);
 
+
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil(
           AppRoutes.home,
@@ -194,6 +196,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       final authNotifier = ref.read(authProvider.notifier);
       authNotifier.unlock(masterKey: masterKey);
 
+
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil(
           AppRoutes.home,
@@ -234,6 +237,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
 
     if (masterKey != null) {
       authNotifier.unlock(masterKey: masterKey);
+
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil(
           AppRoutes.home,
@@ -358,18 +362,16 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       final authNotifier = ref.read(authProvider.notifier);
       authNotifier.unlock(masterKey: masterKey);
 
-      // ✅ 关闭对话框
-      if (mounted) {
-        Navigator.pop(context);
-      }
-
-      // ✅ 跳转到主页，并显示提示
+      // ✅ 先跳转到主页（清空所有路由）
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil(
           AppRoutes.home,
               (route) => false,
         );
-        // 延迟显示提示，等页面加载完成
+      }
+
+      // ✅ 延迟显示警告对话框（等主页加载完成后）
+      if (mounted) {
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) {
             _showRecoveryWarningDialog();

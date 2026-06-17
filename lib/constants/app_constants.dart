@@ -23,8 +23,6 @@ class AppConstants {
   // IV 长度：12字节（GCM模式推荐值）
   static const int ivLength = 12;
 
-  // 助记词
-  static const int mnemonicWordCount = 24;
 
 
   // 图片相关
@@ -38,10 +36,10 @@ class AppConstants {
   static const String keyIsFirstLaunch = 'is_first_launch';
 
   // 暗黑模式开关（true=暗黑模式，false=亮色模式）
+  // ========== SharedPreferences 键名 ==========
   static const String keyDarkMode = 'dark_mode';
+  static const String keyDarkModeFollowSystem = 'dark_mode_follow_system';  // ✅ 新增
 
-  // 应用列表视图模式（'grid'=网格视图，'list'=列表视图）
-  static const String keyAppListViewMode = 'app_list_view_mode';
 
   // 生物识别开关（true=启用指纹/人脸解锁）
   static const String keyBiometricEnabled = 'biometric_enabled';

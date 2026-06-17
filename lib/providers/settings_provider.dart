@@ -2,81 +2,88 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/storage/shared_prefs.dart';
 
-/// 设置状态
 class SettingsState {
-  /// 是否暗黑模式
   final bool isDarkMode;
-
-  /// 应用列表视图模式（'grid' 网格 / 'list' 列表）
-  final String appListViewMode;
-
-  /// 是否启用生物识别
   final bool isBiometricEnabled;
+  final bool darkModeFollowSystem;
+  final bool isLoading;  // ✅ 新增
 
   const SettingsState({
     this.isDarkMode = false,
-    this.appListViewMode = 'grid',
     this.isBiometricEnabled = false,
+    this.darkModeFollowSystem = false,
+    this.isLoading = true,  // ✅ 默认加载中
   });
 
   SettingsState copyWith({
     bool? isDarkMode,
-    String? appListViewMode,
     bool? isBiometricEnabled,
+    bool? darkModeFollowSystem,
+    bool? isLoading,
   }) {
     return SettingsState(
       isDarkMode: isDarkMode ?? this.isDarkMode,
-      appListViewMode: appListViewMode ?? this.appListViewMode,
       isBiometricEnabled: isBiometricEnabled ?? this.isBiometricEnabled,
+      darkModeFollowSystem: darkModeFollowSystem ?? this.darkModeFollowSystem,
+      isLoading: isLoading ?? this.isLoading,
     );
   }
 
-  /// 获取 Flutter 主题模式
   ThemeMode get themeMode {
+    if (darkModeFollowSystem) return ThemeMode.system;
     if (isDarkMode) return ThemeMode.dark;
     return ThemeMode.light;
   }
 }
 
-/// 设置状态提供者
 final settingsProvider = NotifierProvider<SettingsNotifier, SettingsState>(() {
   return SettingsNotifier();
 });
 
-/// 设置提供者（管理应用设置）
 class SettingsNotifier extends Notifier<SettingsState> {
   @override
   SettingsState build() {
-    _loadSettings();
-    return const SettingsState();
+    _loadSettingsAsync();
+    return const SettingsState();  // isLoading = true
   }
 
-  /// 从 SharedPreferences 加载设置
+  void _loadSettingsAsync() {
+    Future.microtask(() => _loadSettings());
+  }
+
   Future<void> _loadSettings() async {
     final isDarkMode = await SharedPrefs.isDarkMode();
-    final appListViewMode = await SharedPrefs.getAppListViewMode();
     final isBiometricEnabled = await SharedPrefs.isBiometricEnabled();
+    final darkModeFollowSystem = await SharedPrefs.isDarkModeFollowSystem();
 
     state = state.copyWith(
       isDarkMode: isDarkMode,
-      appListViewMode: appListViewMode,
       isBiometricEnabled: isBiometricEnabled,
+      darkModeFollowSystem: darkModeFollowSystem,
+      isLoading: false,  // ✅ 加载完成
     );
   }
 
-  /// 切换暗黑模式
   Future<void> toggleDarkMode(bool value) async {
+    // ✅ 如果开启跟随系统，切换时关闭跟随系统
+    if (state.darkModeFollowSystem) {
+      await SharedPrefs.setDarkModeFollowSystem(false);
+      state = state.copyWith(darkModeFollowSystem: false);
+    }
     await SharedPrefs.setDarkMode(value);
     state = state.copyWith(isDarkMode: value);
   }
 
-  /// 设置应用列表视图模式
-  Future<void> setAppListViewMode(String mode) async {
-    await SharedPrefs.setAppListViewMode(mode);
-    state = state.copyWith(appListViewMode: mode);
+  Future<void> toggleDarkModeFollowSystem(bool value) async {
+    await SharedPrefs.setDarkModeFollowSystem(value);
+    state = state.copyWith(darkModeFollowSystem: value);
+    // ✅ 如果开启跟随系统，覆盖手动设置
+    if (value) {
+      // 跟随系统时，手动设置的值被覆盖，但保留以便切换回来时恢复
+    }
   }
 
-  /// 切换生物识别开关
+
   Future<void> toggleBiometric(bool value) async {
     await SharedPrefs.setBiometricEnabled(value);
     state = state.copyWith(isBiometricEnabled: value);

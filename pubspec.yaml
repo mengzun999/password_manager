@@ -72,6 +72,12 @@ dependencies:
   package_info_plus: ^8.0.0   # 获取应用信息
   share_plus: ^7.2.1
 
+  # 权限管理
+  permission_handler: ^11.3.1
+
+  # 设备信息（获取 Android SDK 版本）
+  device_info_plus: ^10.1.2
+
 
 
 dev_dependencies:

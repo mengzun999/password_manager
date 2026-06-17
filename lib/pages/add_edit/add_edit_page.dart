@@ -11,7 +11,7 @@ import 'package:password_manager/providers/auth_provider.dart';
 import 'package:password_manager/utils/helpers.dart';
 import 'package:password_manager/widgets/password_generator_button.dart';
 import 'package:password_manager/pages/image_viewer_page.dart';
-
+import 'package:photo_view/photo_view.dart';
 import '../../utils/toast_utils.dart';
 
 /// 添加/编辑密码页面
@@ -115,8 +115,8 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
 
   // ========== 图片操作方法 ==========
 
-  /// 添加图片（从相册）
-  Future<void> _addPendingImages() async {
+  /// 从相册选择图片
+  Future<void> _pickFromGallery() async {
     final totalCount = _savedImageModels.length + _pendingImages.length;
     if (totalCount >= 20) {
       _showSnackBar('最多添加20张图片');
@@ -124,7 +124,6 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
     }
 
     final maxCount = 20 - totalCount;
-
     final picked = await ImageService.pickImages(maxCount: maxCount);
     if (picked.isNotEmpty) {
       setState(() {
@@ -151,16 +150,13 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
     }
   }
 
-  /// 从文件选择图片
-  Future<void> _pickFileAndAdd() async {
-    await _addPendingImages();
-  }
 
   /// 获取待保存图片的缩略图
   Future<Uint8List> _getPendingThumbnail(XFile file) async {
     try {
       final bytes = await file.readAsBytes();
-      return bytes;
+      // ✅ 生成缩略图，减少内存占用
+      return await ImageService.generateThumbnail(bytes);
     } catch (e) {
       return Uint8List(0);
     }
@@ -239,53 +235,39 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
       final bytes = await _pendingImages[index].readAsBytes();
       if (!mounted) return;
 
-      showDialog(
-        context: context,
-        builder: (context) => Dialog(
-          backgroundColor: Colors.black,
-          child: GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Stack(
-              children: [
-                Center(
-                  child: Image.memory(
-                    bytes,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-                Positioned(
-                  top: 16,
-                  right: 16,
-                  child: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ),
-                Positioned(
-                  bottom: 40,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Text(
-                        '点击关闭',
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+      // ✅ 使用 PhotoView 安全显示大图
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => Scaffold(
+            backgroundColor: Colors.black,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+              title: const Text(
+                '预览图片',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+            body: Center(
+              child: PhotoView(
+                imageProvider: MemoryImage(bytes),
+                backgroundDecoration: const BoxDecoration(color: Colors.black),
+                maxScale: PhotoViewComputedScale.covered * 3,
+                minScale: PhotoViewComputedScale.contained,
+              ),
             ),
           ),
         ),
       );
     } catch (e) {
-      _showSnackBar('预览失败');
+      if (mounted) {
+        _showSnackBar('预览失败');
+      }
     }
   }
 
@@ -716,9 +698,9 @@ class _AddEditPageState extends ConsumerState<AddEditPage> {
       children: [
         Expanded(
           child: OutlinedButton.icon(
-            onPressed: totalCount >= 20 ? null : _addPendingImages,
+            onPressed: totalCount >= 20 ? null : _pickFromGallery,
             icon: const Icon(Icons.photo_library, size: 20),
-            label: const Text('从相册选择'),
+            label: const Text('从相册选择'),  // ✅ 修改文本
           ),
         ),
         const SizedBox(width: 8),

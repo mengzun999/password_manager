@@ -12,7 +12,6 @@ import 'pages/setup/setup_biometric_page.dart';
 import 'pages/add_edit/add_edit_page.dart';
 import 'pages/home/password_detail_page.dart';
 import 'pages/settings/settings_page.dart';
-import 'pages/app_list_page.dart';
 
 class AppRoutes {
   static const String setup = '/setup';
@@ -23,7 +22,6 @@ class AppRoutes {
   static const String home = '/home';
   static const String addEdit = '/add-edit';
   static const String detail = '/detail';
-  static const String appList = '/app-list';
   static const String settings = '/settings';
 }
 
@@ -70,15 +68,20 @@ class _MyAppState extends ConsumerState<MyApp> {
       case AppRoutes.setupBiometric:
         return MaterialPageRoute(builder: (_) => const SetupBiometricPage());
 
+    // ✅ 修改：更严谨的参数判断
       case AppRoutes.addEdit:
         final args = settings.arguments;
-        if (args is PasswordEntry) {
-          return MaterialPageRoute(builder: (_) => AddEditPage(entry: args));
-        } else if (args is String) {
-          return MaterialPageRoute(builder: (_) => AddEditPage(presetTitle: args));
-        } else {
+        if (args == null) {
           return MaterialPageRoute(builder: (_) => const AddEditPage());
         }
+        if (args is PasswordEntry) {
+          return MaterialPageRoute(builder: (_) => AddEditPage(entry: args));
+        }
+        if (args is String) {
+          return MaterialPageRoute(builder: (_) => AddEditPage(presetTitle: args));
+        }
+        // 兜底：未知参数类型
+        return MaterialPageRoute(builder: (_) => const AddEditPage());
 
       case AppRoutes.detail:
         final entryId = settings.arguments as String;
@@ -88,9 +91,6 @@ class _MyAppState extends ConsumerState<MyApp> {
 
       case AppRoutes.settings:
         return MaterialPageRoute(builder: (_) => const SettingsPage());
-
-      case AppRoutes.appList:
-        return MaterialPageRoute(builder: (_) => const AppListPage());
 
       default:
         return MaterialPageRoute(

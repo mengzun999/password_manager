@@ -1,20 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <!-- 获取已安装应用列表权限 -->
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-
+    <uses-permission android:name="android.permission.READ_CLIPBOARD" />
     <!-- 生物识别权限 -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-    <!-- Android 10+ 已废弃，可直接删除 -->
-    <!-- <uses-permission android:name="android.permission.USE_FINGERPRINT" /> -->
-
     <!-- 相机权限（拍照添加图片用） -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
-    <!-- 存储权限适配（Android 10+ 废弃旧权限） -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" android:maxSdkVersion="33" />
+    <!-- Android 13 (API 33) 及以上：读取图片 -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Android 14 (API 34) 及以上：用户选择部分照片访问 -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" android:maxSdkVersion="33" />
+    <!-- Android 12L (API 32) 及以下：传统存储权限 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
 
@@ -23,7 +20,8 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
-        android:fullBackupContent="false">
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
 
         <!-- Flutter 2.0+ 必需的 V2 嵌入配置（解决报错核心） -->
         <meta-data

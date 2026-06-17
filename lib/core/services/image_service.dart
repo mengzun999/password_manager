@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
@@ -8,6 +9,7 @@ import '../crypto/aes_gcm.dart';
 import '../../constants/app_constants.dart';
 import '../../utils/helpers.dart';
 import '../models/image_model.dart';
+import '../services/permission_service.dart';
 
 /// 图片服务
 /// 负责图片的添加、删除、加密、解密、缩略图生成
@@ -185,6 +187,13 @@ class ImageService {
 
   /// 从相册选择图片
   static Future<List<XFile>> pickImages({int maxCount = 20}) async {
+    // ✅ 请求权限
+    final hasPermission = await PermissionService.requestImagePermission();
+    if (!hasPermission) {
+      debugPrint('用户拒绝了图片访问权限');
+      return [];
+    }
+
     final picker = ImagePicker();
     final images = await picker.pickMultiImage(limit: maxCount);
     return images;
@@ -192,6 +201,13 @@ class ImageService {
 
   /// 拍照
   static Future<XFile?> takePhoto() async {
+    // ✅ 请求相机权限
+    final hasPermission = await PermissionService.requestCameraPermission();
+    if (!hasPermission) {
+      debugPrint('用户拒绝了相机权限');
+      return null;
+    }
+
     final picker = ImagePicker();
     final photo = await picker.pickImage(source: ImageSource.camera);
     return photo;
@@ -218,12 +234,19 @@ class ImageService {
 
   /// 获取图片目录
   static Future<Directory> _getImagesDir() async {
-    final documentsDir = await getApplicationDocumentsDirectory();
-    final imagesDir = Directory('${documentsDir.path}/images');
+    // 使用 ApplicationSupportDirectory，更符合 Android 数据存储规范
+    // 路径：Android: /data/data/com.meng.passwordmanager/flutter_support
+    final supportDir = await getApplicationSupportDirectory();
+    final imagesDir = Directory('${supportDir.path}/images');
     if (!await imagesDir.exists()) {
       await imagesDir.create(recursive: true);
     }
     return imagesDir;
+  }
+
+  /// 生成图片缩略图（用于待保存图片的预览）
+  static Future<Uint8List> generateThumbnail(Uint8List originalBytes) async {
+    return _generateThumbnail(originalBytes);
   }
 
   /// 修复：根据路径获取MIME类型（备用方法）

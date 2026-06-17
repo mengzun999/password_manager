@@ -59,26 +59,27 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
 
   /// 加载原图
   Future<void> _loadFullImage(int index) async {
-    // 如果已经加载过，跳过
     if (_loadedMap[index] == true) return;
-
-    // 如果正在加载，跳过
     if (_isLoading) return;
-
-    // 检查索引是否有效
     if (index >= widget.imageModels.length) return;
+
+    // ✅ 检查 mounted
+    if (!mounted) return;
 
     setState(() => _isLoading = true);
 
     try {
       final masterKey = ref.read(masterKeyProvider);
       if (masterKey == null) {
+        if (!mounted) return;
         setState(() => _isLoading = false);
         return;
       }
 
       final imageModel = widget.imageModels[index];
       final fullImage = await ImageService.getImage(imageModel, masterKey);
+
+      if (!mounted) return;
 
       if (fullImage != null) {
         setState(() {
@@ -90,18 +91,20 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
         setState(() => _isLoading = false);
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
 
   /// 切换图片时加载原图
   void _onPageChanged(int index) {
+    if (!mounted) return;  // ✅ 添加检查
+
     setState(() {
       _currentIndex = index;
     });
     _loadFullImage(index);
 
-    // 预加载相邻图片
     if (index > 0) _loadFullImage(index - 1);
     if (index < widget.imageModels.length - 1) _loadFullImage(index + 1);
   }
@@ -129,62 +132,9 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
       final success = await ImageService.deleteImage(imageModel, masterKey);
 
       if (success && mounted) {
-        // 从列表中移除
-        final newModels = List<ImageModel>.from(widget.imageModels);
-        final newThumbnails = List<Uint8List>.from(widget.thumbnails);
-        newModels.removeAt(_currentIndex);
-        newThumbnails.removeAt(_currentIndex);
-
-        // 清除缓存
-        _imageCache.remove(_currentIndex);
-        _loadedMap.remove(_currentIndex);
-
-        // 更新缓存索引
-        final updatedCache = <int, Uint8List>{};
-        final updatedLoaded = <int, bool>{};
-        for (final entry in _imageCache.entries) {
-          if (entry.key > _currentIndex) {
-            updatedCache[entry.key - 1] = entry.value;
-          } else if (entry.key < _currentIndex) {
-            updatedCache[entry.key] = entry.value;
-          }
-        }
-        for (final entry in _loadedMap.entries) {
-          if (entry.key > _currentIndex) {
-            updatedLoaded[entry.key - 1] = entry.value;
-          } else if (entry.key < _currentIndex) {
-            updatedLoaded[entry.key] = entry.value;
-          }
-        }
-        _imageCache.clear();
-        _imageCache.addAll(updatedCache);
-        _loadedMap.clear();
-        _loadedMap.addAll(updatedLoaded);
-
-        // 如果列表为空，关闭页面
-        if (newModels.isEmpty) {
-          Navigator.pop(context, true);
-          return;
-        }
-
-        // 更新当前索引
-        final newIndex = _currentIndex >= newModels.length
-            ? newModels.length - 1
-            : _currentIndex;
-
-        // 刷新页面（通过替换路由）
+        // ✅ 简化：直接关闭查看器，返回 true 表示有删除操作
+        ToastUtils.showSuccess(context, '已删除');
         Navigator.pop(context, true);
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ImageViewerPage(
-              imageModels: newModels,
-              thumbnails: newThumbnails,
-              initialIndex: newIndex,
-              entryId: widget.entryId,
-            ),
-          ),
-        );
       } else {
         ToastUtils.showError(context, '删除失败');
       }
@@ -278,25 +228,6 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
             },
           ),
 
-          // ========== 底部操作提示 ==========
-          Positioned(
-            bottom: 40,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text(
-                  '双指缩放 · 左右滑动切换',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );

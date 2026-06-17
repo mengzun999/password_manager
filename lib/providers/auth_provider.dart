@@ -6,18 +6,21 @@ import 'package:password_manager/constants/app_constants.dart';
 import 'package:password_manager/core/crypto/pbkdf2.dart';
 import 'package:password_manager/core/crypto/random.dart';
 import 'package:password_manager/core/storage/secure_storage.dart';
-import 'package:password_manager/core/storage/shared_prefs.dart';
+import 'package:password_manager/core/storage/database.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// 认证状态
 class AuthState {
   final bool isInitialized;
   final bool isUnlocked;
+  final bool isLoading;  // ✅ 新增
   final String? error;
   final Uint8List? masterKey;
 
   const AuthState({
     required this.isInitialized,
     required this.isUnlocked,
+    this.isLoading = false,  // ✅ 默认 false
     this.error,
     this.masterKey,
   });
@@ -25,12 +28,14 @@ class AuthState {
   AuthState copyWith({
     bool? isInitialized,
     bool? isUnlocked,
+    bool? isLoading,
     String? error,
     Uint8List? masterKey,
   }) {
     return AuthState(
       isInitialized: isInitialized ?? this.isInitialized,
       isUnlocked: isUnlocked ?? this.isUnlocked,
+      isLoading: isLoading ?? this.isLoading,
       error: error ?? this.error,
       masterKey: masterKey ?? this.masterKey,
     );
@@ -56,11 +61,20 @@ final isUnlockedProvider = Provider<bool>((ref) {
 class AuthProvider extends Notifier<AuthState> {
   @override
   AuthState build() {
+    // ✅ 初始状态为加载中
+    _checkInitializedAsync();
     return const AuthState(
       isInitialized: false,
       isUnlocked: false,
+      isLoading: true,  // ✅ 加载中
       masterKey: null,
     );
+  }
+
+  /// ✅ 异步检查初始化状态
+  void _checkInitializedAsync() {
+    // 使用 Future.microtask 避免在 build 中执行异步操作
+    Future.microtask(() => checkInitialized());
   }
 
   /// 检查是否已完成首次设置
@@ -71,6 +85,7 @@ class AuthProvider extends Notifier<AuthState> {
     );
     state = state.copyWith(
       isInitialized: hasSalt && hasMasterHash,
+      isLoading: false,  // ✅ 加载完成
     );
   }
 
@@ -88,16 +103,10 @@ class AuthProvider extends Notifier<AuthState> {
     await checkInitialized();
   }
 
-  /// 仅验证主密码
+  /// 仅验证主密码（使用 isolate，不阻塞 UI）
   Future<bool> verifyMasterPassword(String password) async {
-    final saltBase64 = await SecureStorage.read(AppConstants.keySalt);
-    final storedHash = await SecureStorage.read(
-      AppConstants.keyMasterPasswordHash,
-    );
-    if (saltBase64 == null || storedHash == null) return false;
-
-    final salt = base64Decode(saltBase64);
-    return PBKDF2Helper.verifyPassword(password, salt, storedHash);
+    final key = await verifyAndGetKey(password);
+    return key != null;
   }
 
   /// 验证主密码并返回主密钥
@@ -113,7 +122,7 @@ class AuthProvider extends Notifier<AuthState> {
 
     final salt = base64Decode(saltBase64);
 
-    // ✅ 使用 isolate 计算，不阻塞 UI
+    // 使用 isolate 计算，不阻塞 UI
     final derivedKey = await PBKDF2Helper.deriveKeyIsolate(password, salt);
     final computedHash = base64Encode(derivedKey);
 
@@ -152,18 +161,30 @@ class AuthProvider extends Notifier<AuthState> {
 
   /// 重置所有数据
   Future<void> resetAllData() async {
+    // 1. 清理数据库和图片文件
+    await DatabaseHelper.clearAllData();
+
+    // 2. 清理 SecureStorage
     await SecureStorage.clearAll();
+
+    // 3. 清理 SharedPreferences（可选，但建议）
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+
+    // 4. 重置状态
     state = const AuthState(
       isInitialized: false,
       isUnlocked: false,
+      isLoading: false,
       masterKey: null,
     );
   }
 
   /// 保存恢复密钥
+  /// ✅ 修改：使用 Hex 格式存储哈希，与验证保持一致
   Future<void> setupRecoveryKey(String recoveryKey) async {
     final bytes = utf8.encode(recoveryKey);
-    final hash = base64Encode(sha256.convert(bytes).bytes);
+    final hash = sha256.convert(bytes).toString();  // ✅ Hex
     await SecureStorage.write(AppConstants.keyMnemonicHash, hash);
   }
 
@@ -173,7 +194,7 @@ class AuthProvider extends Notifier<AuthState> {
     if (storedHash == null) return false;
 
     final bytes = utf8.encode(recoveryKey);
-    final hash = base64Encode(sha256.convert(bytes).bytes);
+    final hash = sha256.convert(bytes).toString();  // ✅ Hex
     return hash == storedHash;
   }
 }

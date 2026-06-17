@@ -10,6 +10,7 @@ import 'package:password_manager/core/crypto/random.dart';
 import 'package:password_manager/core/storage/secure_storage.dart';
 import 'package:password_manager/providers/auth_provider.dart';
 import 'package:password_manager/utils/toast_utils.dart';
+import 'package:password_manager/utils/helpers.dart';
 
 /// 恢复密钥设置页面
 class SetupMnemonicPage extends ConsumerStatefulWidget {
@@ -23,7 +24,6 @@ class _SetupMnemonicPageState extends ConsumerState<SetupMnemonicPage> {
   String _recoveryKey = '';
   bool _hasConfirmed = false;
   bool _isSaving = false;
-  bool _obscureKey = true;
 
   @override
   void initState() {
@@ -51,12 +51,10 @@ class _SetupMnemonicPageState extends ConsumerState<SetupMnemonicPage> {
         return;
       }
 
-      // 1. 存储恢复密钥的哈希（用于验证）
       final bytes = utf8.encode(_recoveryKey);
       final hash = sha256.convert(bytes).toString();
       await SecureStorage.write(AppConstants.keyMnemonicHash, hash);
 
-      // 2. ✅ 用恢复密钥派生密钥，加密 masterKey（和手势/指纹一样）
       final recoveryKey = _deriveKeyFromRecovery(_recoveryKey);
       final encryptedMasterKey = await AESGCMHelper.encryptBytes(masterKey, recoveryKey);
 
@@ -76,7 +74,6 @@ class _SetupMnemonicPageState extends ConsumerState<SetupMnemonicPage> {
     }
   }
 
-  /// ✅ 从恢复密钥派生32字节密钥
   Uint8List _deriveKeyFromRecovery(String recoveryKey) {
     final bytes = utf8.encode(recoveryKey);
     final hash = sha256.convert(bytes);
@@ -84,7 +81,7 @@ class _SetupMnemonicPageState extends ConsumerState<SetupMnemonicPage> {
   }
 
   void _copyToClipboard() {
-    // 这里暂时用 ToastUtils
+    Helpers.copyToClipboard(_recoveryKey);
     ToastUtils.showSuccess(context, '已复制到剪贴板，请妥善保存');
   }
 
@@ -118,6 +115,7 @@ class _SetupMnemonicPageState extends ConsumerState<SetupMnemonicPage> {
                           child: Text(
                             '请务必抄写下这串密钥，妥善保存！\n'
                                 '忘记主密码后，可以用这个密钥解锁应用。\n'
+                                '这是一串128字符的十六进制字符串，共512位。\n'
                                 '不要截图保存，不要上传到云端！',
                             style: TextStyle(
                               fontSize: 13,
@@ -146,51 +144,39 @@ class _SetupMnemonicPageState extends ConsumerState<SetupMnemonicPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.light
-                          ? Colors.grey.shade100
-                          : Colors.grey.shade800,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SelectableText(
-                          _obscureKey ? '•' * 32 + '（点击显示）' : _recoveryKey,
-                          style: TextStyle(
-                            fontSize: _obscureKey ? 20 : 14,
-                            fontFamily: _obscureKey ? null : 'monospace',
-                            letterSpacing: _obscureKey ? 4 : 0.5,
+                  GestureDetector(
+                    onTap: _copyToClipboard,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.light
+                            ? Colors.grey.shade100
+                            : Colors.grey.shade800,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _recoveryKey,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontFamily: 'monospace',
+                              letterSpacing: 0.5,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            TextButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  _obscureKey = !_obscureKey;
-                                });
-                              },
-                              icon: Icon(
-                                _obscureKey ? Icons.visibility_off : Icons.visibility,
-                                size: 18,
-                              ),
-                              label: Text(_obscureKey ? '点击显示' : '隐藏'),
+                          const SizedBox(height: 8),
+                          Text(
+                            '👆 点击任意位置复制',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade500,
                             ),
-                            const SizedBox(width: 8),
-                            TextButton.icon(
-                              onPressed: _copyToClipboard,
-                              icon: const Icon(Icons.copy, size: 18),
-                              label: const Text('复制'),
-                            ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 32),

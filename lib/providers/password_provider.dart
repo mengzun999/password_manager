@@ -134,18 +134,35 @@ class PasswordHelper {
     }
   }
 
-  /// 批量解密密码（用于列表显示密码，不推荐）
-  /// 建议只在需要时解密单个密码，避免性能问题
+  /// 批量解密密码（使用并发执行，提升性能）
+  /// 建议只在需要时使用，避免解密大量数据
   static Future<Map<String, String?>> batchDecrypt(
       List<PasswordEntry> entries,
       Uint8List masterKey,
       ) async {
-    final result = <String, String?>{};
-    for (final entry in entries) {
-      if (entry.encryptedPassword != null) {
-        result[entry.id] = await decryptPassword(entry, masterKey);
-      }
+    // 过滤出有加密密码的条目
+    final entriesWithPassword = entries.where((e) => e.encryptedPassword != null).toList();
+
+    if (entriesWithPassword.isEmpty) {
+      return {};
     }
-    return result;
+
+    // ✅ 使用 Future.wait 并发执行所有解密
+    final results = await Future.wait(
+      entriesWithPassword.map((entry) async {
+        try {
+          final plainText = await AESGCMHelper.decrypt(
+            entry.encryptedPassword!,
+            masterKey,
+          );
+          return MapEntry(entry.id, plainText);
+        } catch (e) {
+          return MapEntry(entry.id, null);
+        }
+      }),
+    );
+
+    // 将结果转换为 Map
+    return Map.fromEntries(results);
   }
 }

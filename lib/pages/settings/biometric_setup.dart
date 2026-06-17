@@ -179,7 +179,7 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
     // 1. 验证主密码
     final verified = await _verifyMasterPassword();
     if (!verified) {
-      ToastUtils.showSuccess(context, '指纹解锁已关闭');
+      ToastUtils.showError(context, '验证失败，请输入正确的主密码');  // ✅ 改为错误提示
       return;
     }
 
