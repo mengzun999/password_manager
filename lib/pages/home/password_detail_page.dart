@@ -37,8 +37,14 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
   List<Uint8List> _imageThumbnails = [];
   bool _isLoadingImages = false;
 
+  // ✅ 缓存原图（只缓存点击过的图片）
+  final Map<int, Uint8List> _cachedFullImages = {};
+
   // ✅ 点击图片加载状态
   bool _isLoadingFullImage = false;
+
+  // ✅ 页面是否已销毁
+  bool _isDisposed = false;
 
   // ========== 生命周期方法 ==========
 
@@ -50,12 +56,17 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
 
   @override
   void dispose() {
+    _isDisposed = true;
+    // ✅ 离开页面时清理所有缓存
+    _cachedFullImages.clear();
     super.dispose();
   }
 
   // ========== 数据加载方法 ==========
 
   Future<void> _loadEntry() async {
+    if (_isDisposed) return;
+
     setState(() {
       _isLoading = true;
       _decryptedPassword = null;
@@ -63,6 +74,8 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     });
 
     final entry = await DatabaseHelper.getEntryById(widget.entryId);
+
+    if (_isDisposed) return;
 
     setState(() {
       _entry = entry;
@@ -75,26 +88,33 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
   }
 
   Future<void> _loadImages() async {
-    if (_entry == null) return;
+    if (_entry == null || _isDisposed) return;
 
     setState(() => _isLoadingImages = true);
 
     try {
       final masterKey = _getMasterKey();
       if (masterKey == null) {
-        setState(() => _isLoadingImages = false);
+        if (!_isDisposed) {
+          setState(() => _isLoadingImages = false);
+        }
         return;
       }
 
       final images = await ImageService.getEntryImages(_entry!.id);
+      if (_isDisposed) return;
+
       final thumbnails = <Uint8List>[];
 
       for (final image in images) {
+        if (_isDisposed) break;
         final thumb = await ImageService.getThumbnail(image, masterKey);
         if (thumb != null) {
           thumbnails.add(thumb);
         }
       }
+
+      if (_isDisposed) return;
 
       setState(() {
         _imageModels = images;
@@ -103,7 +123,9 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
       });
     } catch (e) {
       print('加载图片失败: $e');
-      setState(() => _isLoadingImages = false);
+      if (!_isDisposed) {
+        setState(() => _isLoadingImages = false);
+      }
     }
   }
 
@@ -115,6 +137,8 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
   // ========== 密码操作 ==========
 
   Future<void> _decryptPassword() async {
+    if (_isDisposed) return;
+
     final masterKey = _getMasterKey();
     if (masterKey == null) {
       if (mounted) {
@@ -141,11 +165,14 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
         masterKey,
       );
 
+      if (_isDisposed) return;
+
       setState(() {
         _decryptedPassword = decrypted;
         _isDecrypting = false;
       });
     } catch (e) {
+      if (_isDisposed) return;
       setState(() {
         _isDecrypting = false;
       });
@@ -157,12 +184,14 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
 
   Future<void> _copyToClipboard(String text, String label) async {
     await Helpers.copyToClipboard(text);
-    if (mounted) {
+    if (mounted && !_isDisposed) {
       ToastUtils.showSuccess(context, '已复制 $label');
     }
   }
 
   Future<void> _deleteEntry() async {
+    if (_isDisposed) return;
+
     final confirmed = await ToastUtils.showDangerConfirmDialog(
       context,
       title: '删除',
@@ -182,8 +211,9 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     }
   }
 
-  // ✅ 点击缩略图：先显示转圈，在 isolate 中加载原图
+  // ✅ 查看大图（点击后先转圈加载，完成后直接进入查看器）
   void _viewImage(int index) async {
+    if (_isDisposed) return;
     if (index >= _imageThumbnails.length) return;
     if (_entry == null) return;
 
@@ -193,23 +223,9 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
       return;
     }
 
-    // ✅ 先显示转圈（不阻塞UI）
-    setState(() => _isLoadingFullImage = true);
-
-    // ✅ 让UI先渲染转圈
-    await Future.delayed(Duration.zero);
-
-    // ✅ 在 isolate 中加载原图（不阻塞 UI）
-    final imageModel = _imageModels[index];
-    final fullImage = await ImageService.loadImageInIsolate(imageModel, masterKey);
-
-    // ✅ 隐藏转圈
-    if (mounted) {
-      setState(() => _isLoadingFullImage = false);
-    }
-
-    // ✅ 如果加载成功，进入查看器
-    if (fullImage != null && mounted) {
+    // ✅ 如果有缓存，直接进入查看器（不转圈）
+    Uint8List? fullImage = _cachedFullImages[index];
+    if (fullImage != null) {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -222,12 +238,83 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
           ),
         ),
       ).then((_) {
-        if (mounted) {
-          _loadImages();
+        if (!_isDisposed) {
+          _refreshImages();
         }
       });
-    } else if (mounted) {
-      ToastUtils.showError(context, '加载图片失败，请重试');
+      return;
+    }
+
+    // ✅ 没有缓存：先显示转圈，在 isolate 中加载
+    setState(() => _isLoadingFullImage = true);
+    await Future.delayed(Duration.zero);
+
+    final imageModel = _imageModels[index];
+    fullImage = await ImageService.loadImageInIsolate(imageModel, masterKey);
+
+    if (_isDisposed) return;
+
+    setState(() => _isLoadingFullImage = false);
+
+    if (fullImage == null) {
+      if (mounted && !_isDisposed) {
+        ToastUtils.showError(context, '加载图片失败，请重试');
+      }
+      return;
+    }
+
+    // ✅ 存入缓存
+    _cachedFullImages[index] = fullImage;
+
+    // ✅ 直接进入查看器（转圈已结束）
+    if (mounted && !_isDisposed) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ImageViewerPage(
+            imageModels: _imageModels,
+            thumbnails: _imageThumbnails,
+            initialIndex: index,
+            entryId: _entry!.id,
+            preloadedImage: fullImage,
+          ),
+        ),
+      ).then((_) {
+        if (!_isDisposed) {
+          _refreshImages();
+        }
+      });
+    }
+  }
+
+  // ✅ 只刷新缩略图，不重新加载缓存
+  Future<void> _refreshImages() async {
+    if (_entry == null || _isDisposed) return;
+
+    try {
+      final masterKey = _getMasterKey();
+      if (masterKey == null) return;
+
+      final images = await ImageService.getEntryImages(_entry!.id);
+      if (_isDisposed) return;
+
+      final thumbnails = <Uint8List>[];
+      for (final image in images) {
+        if (_isDisposed) break;
+        final thumb = await ImageService.getThumbnail(image, masterKey);
+        if (thumb != null) {
+          thumbnails.add(thumb);
+        }
+      }
+
+      if (_isDisposed) return;
+
+      setState(() {
+        _imageModels = images;
+        _imageThumbnails = thumbnails;
+      });
+    } catch (e) {
+      // 静默失败
     }
   }
 
@@ -244,13 +331,15 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () {
-              if (_entry != null) {
+              if (_entry != null && !_isDisposed) {
                 Navigator.pushNamed(
                   context,
                   AppRoutes.addEdit,
                   arguments: _entry,
                 ).then((_) {
-                  _loadEntry();
+                  if (!_isDisposed) {
+                    _loadEntry();
+                  }
                 });
               }
             },

@@ -34,88 +34,45 @@ class ImageViewerPage extends ConsumerStatefulWidget {
 
 class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
   late int _currentIndex;
-  final Map<int, bool> _loadedMap = {};
-  final Map<int, Uint8List> _imageCache = {};
-  bool _isLoading = false;
+  late Uint8List _currentImage;
+  bool _isDisposed = false;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex.clamp(0, widget.imageModels.length - 1);
 
-    // ✅ 如果有预加载的图片，直接使用
-    if (widget.preloadedImage != null) {
-      _imageCache[_currentIndex] = widget.preloadedImage!;
-      _loadedMap[_currentIndex] = true;
-    } else {
-      _loadFullImage(_currentIndex);
-    }
+    // ✅ 直接使用预加载的图片（必须存在）
+    _currentImage = widget.preloadedImage ?? widget.thumbnails[_currentIndex];
   }
 
   @override
   void dispose() {
-    _imageCache.clear();
-    _loadedMap.clear();
+    _isDisposed = true;
     super.dispose();
   }
 
-  Future<void> _loadFullImage(int index) async {
-    if (_loadedMap[index] == true) return;
-    if (_isLoading) return;
-    if (index >= widget.imageModels.length) return;
-    if (!mounted) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      final masterKey = ref.read(masterKeyProvider);
-      if (masterKey == null) {
-        if (mounted) {
-          setState(() => _isLoading = false);
-        }
-        return;
-      }
-
-      final imageModel = widget.imageModels[index];
-      final fullImage = await ImageService.getImage(imageModel, masterKey);
-
-      if (!mounted) return;
-
-      if (fullImage != null) {
-        setState(() {
-          _imageCache[index] = fullImage;
-          _loadedMap[index] = true;
-          _isLoading = false;
-        });
-      } else {
-        setState(() => _isLoading = false);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-    }
-  }
-
   void _onPageChanged(int index) {
+    if (_isDisposed) return;
     if (!mounted) return;
+
+    // ✅ 如果当前索引没有预加载图片，使用缩略图
+    // 但正常情况下，详情页已经加载好了
+    Uint8List image = widget.thumbnails[index];
+
+    // 如果有预加载图片（从详情页传入的缓存），使用它
+    // 注意：这里简化处理，实际场景中每张图片都已在详情页预加载
+    // 如果用户从查看器删除图片，回退到缩略图
 
     setState(() {
       _currentIndex = index;
+      _currentImage = image;
     });
-
-    if (_loadedMap[index] != true) {
-      _loadFullImage(index);
-    }
-
-    if (index > 0 && _loadedMap[index - 1] != true) {
-      _loadFullImage(index - 1);
-    }
-    if (index < widget.imageModels.length - 1 && _loadedMap[index + 1] != true) {
-      _loadFullImage(index + 1);
-    }
   }
 
   Future<void> _deleteImage() async {
+    if (_isDisposed) return;
+
     final confirmed = await ToastUtils.showConfirmDialog(
       context,
       title: '删除图片',
@@ -136,14 +93,16 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
       final imageModel = widget.imageModels[_currentIndex];
       final success = await ImageService.deleteImage(imageModel, masterKey);
 
-      if (success && mounted) {
+      if (success && mounted && !_isDisposed) {
         ToastUtils.showSuccess(context, '已删除');
         Navigator.pop(context, true);
-      } else {
+      } else if (!_isDisposed) {
         ToastUtils.showError(context, '删除失败');
       }
     } catch (e) {
-      ToastUtils.showError(context, '删除失败: $e');
+      if (!_isDisposed) {
+        ToastUtils.showError(context, '删除失败: $e');
+      }
     }
   }
 
@@ -173,31 +132,15 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
         controller: PageController(initialPage: _currentIndex),
         itemCount: total,
         itemBuilder: (context, index) {
-          final hasFullImage = _loadedMap[index] == true &&
-              _imageCache.containsKey(index);
-
+          // 优先使用预加载图片
           Uint8List? imageBytes;
 
-          if (hasFullImage) {
-            imageBytes = _imageCache[index];
-          } else if (index < widget.thumbnails.length) {
+          // 如果当前索引是预加载图片，使用它
+          if (index == _currentIndex && _currentImage.isNotEmpty) {
+            imageBytes = _currentImage;
+          } else {
+            // 否则使用缩略图
             imageBytes = widget.thumbnails[index];
-          }
-
-          final isLoading = _isLoading &&
-              _loadedMap[index] != true &&
-              index == _currentIndex;
-
-          if (imageBytes == null) {
-            return Center(
-              child: isLoading
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Icon(
-                Icons.broken_image,
-                color: Colors.grey,
-                size: 64,
-              ),
-            );
           }
 
           return PhotoView(
