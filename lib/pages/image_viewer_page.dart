@@ -1,3 +1,5 @@
+// image_viewer_page.dart
+
 // pages/image_viewer_page.dart
 
 import 'dart:typed_data';
@@ -57,8 +59,8 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
     // ✅ 缓存当前图片
     _imageCache[_currentIndex] = _currentImage;
 
-    // ✅ 全屏
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+    // ✅ 使用 immersiveSticky
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
   @override
@@ -102,7 +104,7 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
       _currentIndex = index;
       // ✅ 使用缓存或缩略图
       _currentImage = _imageCache[index] ?? widget.thumbnails[index];
-      _showAppBar = true;
+      // ✅ 修复：不重置 _showAppBar，保持用户当前的显隐状态
     });
 
     // ✅ 预加载当前和相邻图片的原图
@@ -142,7 +144,6 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
 
       if (success && mounted && !_isDisposed) {
         ToastUtils.showSuccess(context, '已删除');
-        // ✅ 从缓存中移除
         _imageCache.remove(_currentIndex);
         Navigator.pop(context, true);
       } else if (!_isDisposed) {
@@ -164,7 +165,7 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
       extendBodyBehindAppBar: true,
       body: Stack(
         children: [
-          // ✅ 使用 PhotoViewGallery 替代 PageView + PhotoView
+          // ✅ 使用 PhotoViewGallery
           GestureDetector(
             onTap: _toggleAppBar,
             child: PhotoViewGallery.builder(
@@ -173,7 +174,6 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
               onPageChanged: _onPageChanged,
               scrollPhysics: const BouncingScrollPhysics(),
               builder: (context, index) {
-                // ✅ 优先使用缓存的原图，否则用缩略图
                 final imageBytes = _imageCache[index] ?? widget.thumbnails[index];
 
                 return PhotoViewGalleryPageOptions(

@@ -4,10 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:password_manager/constants/app_constants.dart';
 import 'package:pointycastle/export.dart';
 
+/// PBKDF2 密钥派生辅助类
 class PBKDF2Helper {
-  // 将密码和盐派生出32字节密钥
+  /// 将密码和盐派生出指定长度的密钥（默认为 32 字节）
   static Uint8List deriveKey(String password, Uint8List salt) {
-    // 1. 创建 PBKDF2 派生器，使用 SHA256 哈希算法
+    // 1. 创建 PBKDF2 派生器，使用 HMAC-SHA256
     final pbkdf2 = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
       ..init(
         Pbkdf2Parameters(
@@ -16,29 +17,31 @@ class PBKDF2Helper {
           AppConstants.pbkdf2KeyLength,
         ),
       );
-    // 2. 把密码字符串转成字节数组
+    // 2. 将密码字符串转换为字节数组 (UTF-8)
     final passwordBytes = Uint8List.fromList(utf8.encode(password));
-    // 3. 派生密钥
+    // 3. 执行密钥派生过程
     final key = Uint8List.fromList(pbkdf2.process(passwordBytes) as List<int>);
 
     return key;
   }
-  // ✅ 新增：用于 isolate 的包装方法
+
+  /// 在 Isolate 中异步派生密钥，避免阻塞主线程 UI
   static Future<Uint8List> deriveKeyIsolate(String password, Uint8List salt) {
     return compute(_deriveKeyInIsolate, _DeriveKeyParams(password, salt));
   }
-  // 必须是顶层函数或静态方法，不能是闭包
+
+  /// Isolate 内部调用的静态方法
   static Uint8List _deriveKeyInIsolate(_DeriveKeyParams params) {
     return deriveKey(params.password, params.salt);
   }
 
-  // 生成密码的哈希值（用于存储和验证）
+  /// 生成密码的哈希值（Base64 编码，用于存储和验证）
   static String hashPassword(String password, Uint8List salt) {
     final key = deriveKey(password, salt);
     return base64Encode(key);
   }
 
-  //验证密码是否正确
+  /// 验证提供的密码与存储的哈希值是否匹配
   static bool verifyPassword(
     String password,
     Uint8List salt,
@@ -48,7 +51,8 @@ class PBKDF2Helper {
     return hash == storedHash;
   }
 }
-// ✅ 新增：参数传递类（必须可序列化）
+
+/// PBKDF2 参数包装类，用于 Isolate 间的数据传递
 class _DeriveKeyParams {
   final String password;
   final Uint8List salt;

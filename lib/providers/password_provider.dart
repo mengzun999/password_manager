@@ -1,3 +1,5 @@
+// password_provider.dart
+
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:password_manager/core/crypto/aes_gcm.dart';
@@ -67,6 +69,7 @@ class PasswordNotifier extends Notifier<PasswordState> {
 
   /// 加载所有密码条目
   Future<void> loadEntries() async {
+    // ✅ 如果已经有错误，先清除
     state = state.copyWith(isLoading: true, error: null);
 
     try {
@@ -90,27 +93,65 @@ class PasswordNotifier extends Notifier<PasswordState> {
     state = state.copyWith(searchKeyword: '');
   }
 
-  /// 添加密码条目
-  Future<void> addEntry(PasswordEntry entry) async {
-    await DatabaseHelper.insertEntry(entry);
-    await loadEntries();  // 刷新列表
+  /// ✅ 添加密码条目（添加错误处理）
+  Future<bool> addEntry(PasswordEntry entry) async {
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      await DatabaseHelper.insertEntry(entry);
+      await loadEntries();
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: '添加失败: $e',
+      );
+      return false;
+    }
   }
 
-  /// 更新密码条目
-  Future<void> updateEntry(PasswordEntry entry) async {
-    await DatabaseHelper.updateEntry(entry);
-    await loadEntries();  // 刷新列表
+  /// ✅ 更新密码条目（添加错误处理）
+  Future<bool> updateEntry(PasswordEntry entry) async {
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      await DatabaseHelper.updateEntry(entry);
+      await loadEntries();
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: '更新失败: $e',
+      );
+      return false;
+    }
   }
 
-  /// 删除密码条目
-  Future<void> deleteEntry(String id) async {
-    await DatabaseHelper.deleteEntry(id);
-    await loadEntries();  // 刷新列表
+  /// ✅ 删除密码条目（添加错误处理）
+  Future<bool> deleteEntry(String id) async {
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      await DatabaseHelper.deleteEntry(id);
+      await loadEntries();
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: '删除失败: $e',
+      );
+      return false;
+    }
   }
 
   /// 刷新列表
   Future<void> refresh() async {
     await loadEntries();
+  }
+
+  /// ✅ 清除错误信息（供 UI 调用）
+  void clearError() {
+    state = state.copyWith(error: null);
   }
 }
 

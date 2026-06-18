@@ -1,3 +1,5 @@
+// setup_biometric_page.dart
+
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -128,6 +130,8 @@ class _SetupBiometricContentState
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     if (_isChecking) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -143,15 +147,16 @@ class _SetupBiometricContentState
               Icons.fingerprint,
               size: 80,
               color: _isFingerprintAvailable
-                  ? Theme.of(context).primaryColor
+                  ? (isDark ? Colors.purple.shade300 : Theme.of(context).primaryColor)
                   : Colors.grey.shade400,
             ),
             const SizedBox(height: 24),
             Text(
               _isFingerprintAvailable ? '设置指纹解锁' : '当前设备不支持指纹',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : Colors.black87,
               ),
             ),
             const SizedBox(height: 12),
@@ -162,7 +167,7 @@ class _SetupBiometricContentState
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey.shade600,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
               ),
             ),
             const SizedBox(height: 16),
@@ -170,9 +175,11 @@ class _SetupBiometricContentState
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.green.shade50,
+                  color: isDark ? Colors.green.shade900 : Colors.green.shade50,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.green.shade200),
+                  border: Border.all(
+                    color: isDark ? Colors.green.shade700 : Colors.green.shade200,
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -180,14 +187,14 @@ class _SetupBiometricContentState
                     Icon(
                       Icons.check_circle,
                       size: 16,
-                      color: Colors.green.shade700,
+                      color: isDark ? Colors.green.shade300 : Colors.green.shade700,
                     ),
                     const SizedBox(width: 6),
                     Text(
                       '指纹可用',
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.green.shade700,
+                        color: isDark ? Colors.green.shade300 : Colors.green.shade700,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -224,7 +231,8 @@ class _SetupBiometricContentState
                     style: const TextStyle(fontSize: 16),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).primaryColor,
+                    // ✅ 修复：暗色模式下使用亮色，确保按钮可见
+                    backgroundColor: isDark ? Colors.purple.shade400 : Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -240,13 +248,21 @@ class _SetupBiometricContentState
               child: OutlinedButton(
                 onPressed: _skip,
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.grey.shade600,
-                  side: BorderSide(color: Colors.grey.shade300),
+                  foregroundColor: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  side: BorderSide(
+                    color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text('跳过', style: TextStyle(fontSize: 16)),
+                child: Text(
+                  '跳过',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 20),

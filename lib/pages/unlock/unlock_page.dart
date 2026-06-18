@@ -1,3 +1,5 @@
+// unlock_page.dart
+
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -372,59 +374,15 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         );
       }
 
-      if (mounted) {
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            _showRecoveryWarningDialog();
-          }
-        });
-      }
+      // ✅ 移除重复弹窗
+      // 用户已成功解锁，不需要额外弹窗提醒
+
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       ToastUtils.showError(context, '解锁失败: $e');
     }
-  }
-
-  void _showRecoveryWarningDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber, color: Colors.orange.shade700),
-            const SizedBox(width: 8),
-            const Text('⚠️ 重要提醒'),
-          ],
-        ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '您正在使用恢复密钥解锁应用。',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-            ),
-            SizedBox(height: 12),
-            Text(
-              '请尽快将主密码记在安全的地方！\n\n'
-                  '• 主密码是您唯一能正常解锁的方式\n'
-                  '• 恢复密钥仅作为备用，不建议日常使用\n'
-                  '• 如果忘记主密码，请立即重新设置',
-              style: TextStyle(fontSize: 14, height: 1.5),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('知道了'),
-          ),
-        ],
-      ),
-    );
   }
 
   void _switchToGesture() {
@@ -534,10 +492,9 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
           child: ElevatedButton(
             onPressed: _isLoading ? null : _handleUnlock,
             style: ElevatedButton.styleFrom(
-              // ✅ 暗黑模式下使用更亮的颜色
               backgroundColor: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.purple.shade400  // 暗黑模式下亮蓝色
-                  : Theme.of(context).primaryColor,  // 亮色模式下用主题色
+                  ? Colors.purple.shade400
+                  : Theme.of(context).primaryColor,
               foregroundColor: Colors.white,
               elevation: 2,
               shadowColor: Colors.black.withValues(alpha: 0.3),

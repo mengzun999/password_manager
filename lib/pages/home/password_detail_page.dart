@@ -1,3 +1,5 @@
+// password_detail_page.dart
+
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,8 +39,8 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
   List<Uint8List> _imageThumbnails = [];
   bool _isLoadingImages = false;
 
-  // ✅ 缓存原图（只缓存点击过的图片）
-  final Map<int, Uint8List> _cachedFullImages = {};
+  // ✅ 修复：使用 imageModel.id 作为缓存键，而不是 index
+  final Map<String, Uint8List> _cachedFullImages = {};
 
   // ✅ 点击图片加载状态
   bool _isLoadingFullImage = false;
@@ -211,7 +213,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     }
   }
 
-  // ✅ 查看大图（点击后先转圈加载，完成后直接进入查看器）
+  // ✅ 查看大图 - 使用 imageModel.id 作为缓存键
   void _viewImage(int index) async {
     if (_isDisposed) return;
     if (index >= _imageThumbnails.length) return;
@@ -223,8 +225,11 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
       return;
     }
 
-    // ✅ 如果有缓存，直接进入查看器（不转圈）
-    Uint8List? fullImage = _cachedFullImages[index];
+    final imageModel = _imageModels[index];
+    final imageId = imageModel.id;
+
+    // ✅ 使用 imageModel.id 作为缓存键
+    Uint8List? fullImage = _cachedFullImages[imageId];
     if (fullImage != null) {
       Navigator.push(
         context,
@@ -249,7 +254,6 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     setState(() => _isLoadingFullImage = true);
     await Future.delayed(Duration.zero);
 
-    final imageModel = _imageModels[index];
     fullImage = await ImageService.loadImageInIsolate(imageModel, masterKey);
 
     if (_isDisposed) return;
@@ -263,8 +267,8 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
       return;
     }
 
-    // ✅ 存入缓存
-    _cachedFullImages[index] = fullImage;
+    // ✅ 存入缓存（使用 imageModel.id 作为键）
+    _cachedFullImages[imageId] = fullImage;
 
     // ✅ 直接进入查看器（转圈已结束）
     if (mounted && !_isDisposed) {
@@ -287,7 +291,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     }
   }
 
-  // ✅ 只刷新缩略图，不重新加载缓存
+  // ✅ 刷新缩略图，同时清理已删除图片的缓存
   Future<void> _refreshImages() async {
     if (_entry == null || _isDisposed) return;
 
@@ -297,6 +301,12 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
 
       final images = await ImageService.getEntryImages(_entry!.id);
       if (_isDisposed) return;
+
+      // ✅ 获取当前图片 ID 列表
+      final currentImageIds = images.map((e) => e.id).toSet();
+
+      // ✅ 清理缓存中已被删除的图片
+      _cachedFullImages.removeWhere((key, value) => !currentImageIds.contains(key));
 
       final thumbnails = <Uint8List>[];
       for (final image in images) {

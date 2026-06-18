@@ -1,3 +1,5 @@
+// database.dart
+
 import 'package:password_manager/constants/app_constants.dart';
 import 'package:password_manager/core/models/image_model.dart';
 import 'package:password_manager/core/models/password_entry.dart';
@@ -142,19 +144,27 @@ class DatabaseHelper {
     return maps.map((map) => PasswordEntry.fromMap(map)).toList();
   }
 
-  // 清空所有数据（重置App时使用）
-  // 1. 删除数据库中的所有记录
-  // 2. 删除图片文件夹
+  /// ✅ 修复 P0：清空所有数据（重置App时使用）
+  /// 1. 显式清空 images 表（防止外键约束未启用导致残留）
+  /// 2. 删除 entries 表中的所有记录
+  /// 3. 删除图片文件夹
   static Future<void> clearAllData() async {
     final db = await database;
+
+    // ✅ 先清空 images 表（确保外键约束未启用时也能清除干净）
+    await db.delete('images');
+
+    // 再删除 entries 表数据
     await db.delete('entries');
 
+    // 删除图片文件夹
     final supportDir = await getApplicationSupportDirectory();
     final imagesDir = Directory(join(supportDir.path, 'images'));
     if (await imagesDir.exists()) {
       await imagesDir.delete(recursive: true);
     }
   }
+
   // 插入图片
   static Future<void> insertImage(ImageModel image) async {
     final db = await database;
