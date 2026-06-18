@@ -17,6 +17,7 @@ import 'package:password_manager/providers/password_provider.dart';
 import 'package:password_manager/providers/settings_provider.dart';
 import 'package:password_manager/widgets/gesture_pattern_view.dart';
 import '../../utils/toast_utils.dart';
+import 'about_page.dart';
 import 'background_settings_page.dart';
 import 'biometric_setup.dart';
 import 'gesture_setup_page.dart';
@@ -888,6 +889,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         subtitle: '当前: ${settings.compressLevelName} - ${settings.compressLevelSubtitle}',
         onTap: () {
           _showCompressLevelDialog();
+        },
+      ),
+      const Divider(),
+      _buildSectionHeader('其他'),
+      _buildMenuItem(
+        icon: Icons.info_outline,
+        title: '关于',
+        subtitle: '版本 1.0.0',  // 需要定义 _appVersion
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AboutPage()),
+          );
         },
       ),
       const SizedBox(height: 40),
