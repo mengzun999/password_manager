@@ -80,4 +80,6 @@ class AppConstants {
   static const String keyBackgroundOpacity = 'background_opacity';      // 卡片透明度 (0-100)
   static const String keyBackgroundBlur = 'background_blur';            // 背景模糊度 (0-30)
   static const String keyTextColor = 'background_text_color';           // 文字颜色 (ARGB int)
+
+
 }

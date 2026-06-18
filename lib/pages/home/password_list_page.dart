@@ -26,7 +26,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
   bool _isPositionLoaded = false;
   final FocusNode _searchFocusNode = FocusNode();
 
-  // ✅ 用于判断是否滚动了
   bool _isScrolled = false;
 
   @override
@@ -138,7 +137,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
     });
   }
 
-  // ✅ 监听滚动，更新 _isScrolled
   void _onScroll(double offset) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusScope.of(context).unfocus();
@@ -164,9 +162,14 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
 
     final showBackground = !isDark && settings.showBackground;
 
-    // ✅ AppBar 背景色
+    // ✅ AppBar 背景色（始终有颜色，防止穿透）
     Color getAppBarBackground() {
-      if (!_isScrolled) return Colors.transparent;
+      if (!_isScrolled) {
+        // 未滚动：极淡的半透明，让背景图显示但挡住列表穿透
+        return showBackground
+            ? Colors.white.withValues(alpha: 0.1)
+            : (isDark ? Colors.grey.shade900 : Colors.grey.shade100);
+      }
       if (showBackground) {
         return Colors.white.withValues(alpha: 0.7);
       } else {
@@ -174,7 +177,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
       }
     }
 
-    // ✅ 搜索框背景色（滚动后跟随 AppBar）
+    // ✅ 搜索框背景色
     Color getSearchFillColor() {
       if (isDark) return Colors.grey.shade800;
       if (showBackground) {
@@ -226,7 +229,6 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                   pinned: true,
                   elevation: 0,
                   backgroundColor: Colors.transparent,
-                  // ✅ 始终显示标题
                   title: Text(
                     '密码管家',
                     style: TextStyle(
