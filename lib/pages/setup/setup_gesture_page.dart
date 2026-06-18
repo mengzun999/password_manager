@@ -144,69 +144,71 @@ class _SetupGesturePageState extends NoBackStatefulPage<SetupGesturePage> {
 
   @override
   Widget buildContent(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  _step == 1
-                      ? '绘制你的手势图案（至少连接4个点）'
-                      : '请再次绘制相同的手势图案',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.blue.shade800,
-                  ),
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 8),
+    return SingleChildScrollView(  // ✅ 添加滚动
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
                   Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.red),
+                    _step == 1
+                        ? '绘制你的手势图案（至少连接4个点）'
+                        : '请再次绘制相同的手势图案',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.blue.shade800,
+                    ),
                   ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _error!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 40),
-          Center(
-            child: SizedBox(
-              width: 280,
-              height: 280,
-              child: GesturePatternView(
-                key: _gestureKey,
-                onPatternComplete: _onPatternComplete,
-                onPatternChanged: (pattern) {
-                  setState(() {
-                    _currentPattern = pattern;
-                  });
-                },
               ),
             ),
-          ),
-          const SizedBox(height: 40),
-          if (_isSaving)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: CircularProgressIndicator(),
+            const SizedBox(height: 40),
+            Center(
+              child: SizedBox(
+                width: 280,
+                height: 280,
+                child: GesturePatternView(
+                  key: _gestureKey,
+                  onPatternComplete: _onPatternComplete,
+                  onPatternChanged: (pattern) {
+                    setState(() {
+                      _currentPattern = pattern;
+                    });
+                  },
+                ),
+              ),
             ),
-          if (!_isSaving)
-            TextButton(
-              onPressed: () {
-                if (mounted) {
-                  Navigator.pushReplacementNamed(context, AppRoutes.setupBiometric);
-                }
-              },
-              child: const Text('跳过'),
-            ),
-        ],
+            const SizedBox(height: 40),
+            if (_isSaving)
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(),
+              ),
+            if (!_isSaving)
+              TextButton(
+                onPressed: () {
+                  if (mounted) {
+                    Navigator.pushReplacementNamed(context, AppRoutes.setupBiometric);
+                  }
+                },
+                child: const Text('跳过'),
+              ),
+          ],
+        ),
       ),
     );
   }

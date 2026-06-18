@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../constants/app_constants.dart';
 import '../core/storage/shared_prefs.dart';
 
 class SettingsState {
@@ -16,6 +17,9 @@ class SettingsState {
   final int backgroundBlur;     // 0-30
   final int textColor;          // ARGB int
 
+  // ✅ 图片压缩档位 (0=原图, 1=高, 2=中)
+  final int imageCompressLevel;
+
   const SettingsState({
     this.isDarkMode = false,
     this.isBiometricEnabled = false,
@@ -25,7 +29,8 @@ class SettingsState {
     this.backgroundImagePath,
     this.backgroundOpacity = 30,
     this.backgroundBlur = 10,
-    this.textColor = 0xFF000000,  // ✅ 改为黑色（默认）
+    this.textColor = 0xFF000000,
+    this.imageCompressLevel = AppConstants.compressLevelMedium,
   });
 
   SettingsState copyWith({
@@ -38,6 +43,7 @@ class SettingsState {
     int? backgroundOpacity,
     int? backgroundBlur,
     int? textColor,
+    int? imageCompressLevel,
   }) {
     return SettingsState(
       isDarkMode: isDarkMode ?? this.isDarkMode,
@@ -49,6 +55,7 @@ class SettingsState {
       backgroundOpacity: backgroundOpacity ?? this.backgroundOpacity,
       backgroundBlur: backgroundBlur ?? this.backgroundBlur,
       textColor: textColor ?? this.textColor,
+      imageCompressLevel: imageCompressLevel ?? this.imageCompressLevel,
     );
   }
 
@@ -77,6 +84,53 @@ class SettingsState {
   bool get hasBackgroundImage {
     return backgroundImagePath != null && backgroundImagePath!.isNotEmpty;
   }
+
+  // ✅ 获取当前压缩质量值
+  int get compressQuality {
+    switch (imageCompressLevel) {
+      case AppConstants.compressLevelOriginal:
+        return 100;
+      case AppConstants.compressLevelHigh:
+        return AppConstants.compressQualityHigh;
+      case AppConstants.compressLevelMedium:
+        return AppConstants.compressQualityMedium;
+      default:
+        return AppConstants.compressQualityMedium;
+    }
+  }
+
+  // ✅ 是否压缩（原图档位返回 false）
+  bool get shouldCompress {
+    return imageCompressLevel != AppConstants.compressLevelOriginal;
+  }
+
+  // ✅ 获取档位名称
+  String get compressLevelName {
+    switch (imageCompressLevel) {
+      case AppConstants.compressLevelOriginal:
+        return AppConstants.compressLevelNameOriginal;
+      case AppConstants.compressLevelHigh:
+        return AppConstants.compressLevelNameHigh;
+      case AppConstants.compressLevelMedium:
+        return AppConstants.compressLevelNameMedium;
+      default:
+        return AppConstants.compressLevelNameMedium;
+    }
+  }
+
+  // ✅ 获取档位副标题
+  String get compressLevelSubtitle {
+    switch (imageCompressLevel) {
+      case AppConstants.compressLevelOriginal:
+        return AppConstants.compressLevelSubtitleOriginal;
+      case AppConstants.compressLevelHigh:
+        return AppConstants.compressLevelSubtitleHigh;
+      case AppConstants.compressLevelMedium:
+        return AppConstants.compressLevelSubtitleMedium;
+      default:
+        return AppConstants.compressLevelSubtitleMedium;
+    }
+  }
 }
 
 final settingsProvider = NotifierProvider<SettingsNotifier, SettingsState>(() {
@@ -103,6 +157,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final backgroundOpacity = await SharedPrefs.getBackgroundOpacity();
     final backgroundBlur = await SharedPrefs.getBackgroundBlur();
     final textColor = await SharedPrefs.getTextColor();
+    final imageCompressLevel = await SharedPrefs.getImageCompressLevel();
 
     state = state.copyWith(
       isDarkMode: isDarkMode,
@@ -114,6 +169,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
       backgroundOpacity: backgroundOpacity,
       backgroundBlur: backgroundBlur,
       textColor: textColor,
+      imageCompressLevel: imageCompressLevel,
     );
   }
 
@@ -176,7 +232,15 @@ class SettingsNotifier extends Notifier<SettingsState> {
       backgroundImagePath: null,
       backgroundOpacity: 30,
       backgroundBlur: 10,
-      textColor: 0xFF000000,  // ✅ 恢复默认黑色
+      textColor: 0xFF000000,
     );
+  }
+
+  // ========== ✅ 图片压缩相关方法 ==========
+
+  /// 设置压缩档位
+  Future<void> setImageCompressLevel(int level) async {
+    await SharedPrefs.setImageCompressLevel(level);
+    state = state.copyWith(imageCompressLevel: level);
   }
 }

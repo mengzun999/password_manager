@@ -133,8 +133,8 @@ class _SetupBiometricContentState
     }
 
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -194,7 +194,7 @@ class _SetupBiometricContentState
                   ],
                 ),
               ),
-            const Spacer(),
+            const SizedBox(height: 24),
             if (_error != null) ...[
               Text(
                 _error!,
@@ -203,7 +203,6 @@ class _SetupBiometricContentState
               ),
               const SizedBox(height: 16),
             ],
-            // ✅ 录制指纹按钮（仅设备支持时显示）
             if (_isFingerprintAvailable) ...[
               SizedBox(
                 width: double.infinity,
@@ -235,7 +234,6 @@ class _SetupBiometricContentState
               ),
               const SizedBox(height: 16),
             ],
-            // ✅ 跳过按钮 - 始终显示
             SizedBox(
               width: double.infinity,
               height: 50,

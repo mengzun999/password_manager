@@ -3,7 +3,9 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:photo_view/photo_view.dart';
+import 'package:photo_view/photo_view_gallery.dart';
 import 'package:password_manager/core/models/image_model.dart';
 import 'package:password_manager/core/services/image_service.dart';
 import 'package:password_manager/providers/auth_provider.dart';
@@ -33,40 +35,85 @@ class ImageViewerPage extends ConsumerStatefulWidget {
 }
 
 class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
+  late PageController _pageController;
   late int _currentIndex;
   late Uint8List _currentImage;
   bool _isDisposed = false;
+
+  // ✅ 控制 AppBar 显隐
+  bool _showAppBar = true;
+
+  // ✅ 缓存已加载的原图
+  final Map<int, Uint8List> _imageCache = {};
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex.clamp(0, widget.imageModels.length - 1);
+    _pageController = PageController(initialPage: _currentIndex);
 
-    // ✅ 直接使用预加载的图片（必须存在）
     _currentImage = widget.preloadedImage ?? widget.thumbnails[_currentIndex];
+
+    // ✅ 缓存当前图片
+    _imageCache[_currentIndex] = _currentImage;
+
+    // ✅ 全屏
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
   }
 
   @override
   void dispose() {
     _isDisposed = true;
+    _pageController.dispose();
+    _imageCache.clear();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  // ✅ 加载原图（异步，不阻塞滑动）
+  Future<void> _loadFullImage(int index) async {
+    if (_imageCache.containsKey(index)) return;
+    if (index >= widget.imageModels.length) return;
+    if (_isDisposed) return;
+
+    try {
+      final masterKey = ref.read(masterKeyProvider);
+      if (masterKey == null) return;
+
+      final imageModel = widget.imageModels[index];
+      final fullImage = await ImageService.loadImageInIsolate(imageModel, masterKey);
+
+      if (_isDisposed) return;
+      if (fullImage != null && mounted) {
+        setState(() {
+          _imageCache[index] = fullImage;
+        });
+      }
+    } catch (e) {
+      // 静默失败
+    }
   }
 
   void _onPageChanged(int index) {
     if (_isDisposed) return;
     if (!mounted) return;
 
-    // ✅ 如果当前索引没有预加载图片，使用缩略图
-    // 但正常情况下，详情页已经加载好了
-    Uint8List image = widget.thumbnails[index];
-
-    // 如果有预加载图片（从详情页传入的缓存），使用它
-    // 注意：这里简化处理，实际场景中每张图片都已在详情页预加载
-    // 如果用户从查看器删除图片，回退到缩略图
-
     setState(() {
       _currentIndex = index;
-      _currentImage = image;
+      // ✅ 使用缓存或缩略图
+      _currentImage = _imageCache[index] ?? widget.thumbnails[index];
+      _showAppBar = true;
+    });
+
+    // ✅ 预加载当前和相邻图片的原图
+    _loadFullImage(index);
+    if (index > 0) _loadFullImage(index - 1);
+    if (index < widget.imageModels.length - 1) _loadFullImage(index + 1);
+  }
+
+  void _toggleAppBar() {
+    setState(() {
+      _showAppBar = !_showAppBar;
     });
   }
 
@@ -95,6 +142,8 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
 
       if (success && mounted && !_isDisposed) {
         ToastUtils.showSuccess(context, '已删除');
+        // ✅ 从缓存中移除
+        _imageCache.remove(_currentIndex);
         Navigator.pop(context, true);
       } else if (!_isDisposed) {
         ToastUtils.showError(context, '删除失败');
@@ -112,61 +161,110 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black.withValues(alpha: 0.5),
-        elevation: 0,
-        foregroundColor: Colors.white,
-        title: Text(
-          '${_currentIndex + 1} / $total',
-          style: const TextStyle(color: Colors.white),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.white),
-            onPressed: _deleteImage,
+      extendBodyBehindAppBar: true,
+      body: Stack(
+        children: [
+          // ✅ 使用 PhotoViewGallery 替代 PageView + PhotoView
+          GestureDetector(
+            onTap: _toggleAppBar,
+            child: PhotoViewGallery.builder(
+              pageController: _pageController,
+              itemCount: total,
+              onPageChanged: _onPageChanged,
+              scrollPhysics: const BouncingScrollPhysics(),
+              builder: (context, index) {
+                // ✅ 优先使用缓存的原图，否则用缩略图
+                final imageBytes = _imageCache[index] ?? widget.thumbnails[index];
+
+                return PhotoViewGalleryPageOptions(
+                  imageProvider: MemoryImage(imageBytes),
+                  initialScale: PhotoViewComputedScale.contained,
+                  minScale: PhotoViewComputedScale.contained * 0.8,
+                  maxScale: PhotoViewComputedScale.covered * 2,
+                  heroAttributes: PhotoViewHeroAttributes(tag: 'image_$index'),
+                  gestureDetectorBehavior: HitTestBehavior.opaque,
+                );
+              },
+              loadingBuilder: (context, event) => Center(
+                child: CircularProgressIndicator(
+                  value: event == null
+                      ? null
+                      : event.cumulativeBytesLoaded / event.expectedTotalBytes!,
+                  color: Colors.white,
+                ),
+              ),
+              backgroundDecoration: const BoxDecoration(color: Colors.black),
+            ),
           ),
+
+          // ✅ 顶部 AppBar
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            top: _showAppBar ? 0 : -kToolbarHeight - 20,
+            left: 0,
+            right: 0,
+            child: Container(
+              height: kToolbarHeight + 40,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.6),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+              child: SafeArea(
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${_currentIndex + 1} / $total',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        shadows: [
+                          Shadow(color: Colors.black26, blurRadius: 4),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.white),
+                      onPressed: _deleteImage,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // ✅ 底部渐变遮罩
+          if (_showAppBar)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 60,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.3),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
-      ),
-      body: PageView.builder(
-        onPageChanged: _onPageChanged,
-        controller: PageController(initialPage: _currentIndex),
-        itemCount: total,
-        itemBuilder: (context, index) {
-          // 优先使用预加载图片
-          Uint8List? imageBytes;
-
-          // 如果当前索引是预加载图片，使用它
-          if (index == _currentIndex && _currentImage.isNotEmpty) {
-            imageBytes = _currentImage;
-          } else {
-            // 否则使用缩略图
-            imageBytes = widget.thumbnails[index];
-          }
-
-          return PhotoView(
-            imageProvider: MemoryImage(imageBytes),
-            backgroundDecoration: const BoxDecoration(color: Colors.black),
-            minScale: PhotoViewComputedScale.contained,
-            maxScale: PhotoViewComputedScale.covered * 2,
-            gestureDetectorBehavior: HitTestBehavior.opaque,
-            loadingBuilder: (context, progress) => Center(
-              child: CircularProgressIndicator(
-                value: progress == null
-                    ? null
-                    : progress.cumulativeBytesLoaded /
-                    progress.expectedTotalBytes!,
-                color: Colors.white,
-              ),
-            ),
-            errorBuilder: (context, error, stackTrace) => const Center(
-              child: Icon(
-                Icons.broken_image,
-                color: Colors.grey,
-                size: 64,
-              ),
-            ),
-          );
-        },
       ),
     );
   }

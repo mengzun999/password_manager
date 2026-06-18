@@ -26,6 +26,9 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:password_manager/utils/helpers.dart';
+import 'package:password_manager/core/models/password_entry.dart';
+
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -129,11 +132,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       await _reEncryptForGesture(newMasterKey);
       await _reEncryptForBiometric(newMasterKey);
 
-
       authNotifier.unlock(masterKey: newMasterKey);
       ToastUtils.showSuccess(context, '主密码修改成功');
 
-// ✅ 刷新密码列表，确保 UI 与数据库同步
       ref.read(passwordProvider.notifier).loadEntries();
     } catch (e) {
       ToastUtils.showError(context, '修改失败: $e');
@@ -172,7 +173,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return Uint8List.fromList(hash.bytes);
   }
 
-  // ========== 手势图案 ==========
+// ========== 手势图案 ==========
   Future<void> _changeGesture() async {
     final hasGesture = await SharedPrefs.hasGesture();
     bool verified = false;
@@ -181,8 +182,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       verified = await _verifyExistingGesture();
     } else {
       final password = await _showPasswordDialog('验证身份', '请输入主密码');
-      if (password != null) {
+      if (password != null && password.isNotEmpty) {
         verified = await ref.read(authProvider.notifier).verifyMasterPassword(password);
+        // ✅ 添加错误提示
+        if (!verified && mounted) {
+          ToastUtils.showError(context, '主密码错误，请重试');
+        }
       }
     }
 
@@ -199,6 +204,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<bool> _verifyExistingGesture() async {
     final completer = Completer<bool>();
+    final patternKey = GlobalKey<GesturePatternViewState>();
+
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -208,12 +215,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           width: 250,
           height: 250,
           child: GesturePatternView(
+            key: patternKey,
             onPatternComplete: (pattern) async {
               final isValid = await _verifyGesturePattern(pattern);
-              if (mounted) {
+              if (isValid) {
                 Navigator.pop(context);
-                completer.complete(isValid);
-                if (!isValid) ToastUtils.showError(context, '手势错误');
+                if (!completer.isCompleted) {
+                  completer.complete(true);
+                }
+              } else {
+                // ✅ 清除图案并提示错误
+                patternKey.currentState?.clearPattern();
+                ToastUtils.showError(context, '手势错误，请重试');
               }
             },
             onPatternChanged: (_) {},
@@ -221,6 +234,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
       ),
     );
+
+    if (!completer.isCompleted) {
+      completer.complete(false);
+    }
+
     return completer.future;
   }
 
@@ -233,7 +251,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return currentHash == storedHash;
   }
 
-  // ========== 方案B：导出备份 ==========
+  // ========== 导出备份 ==========
   Future<void> _exportBackup() async {
     final recoveryKey = await _showRecoveryKeyDialog(
       title: '验证恢复密钥',
@@ -244,7 +262,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       return;
     }
 
-    // ✅ 获取当前主密钥
     final authState = ref.read(authProvider);
     final masterKey = authState.masterKey;
     if (masterKey == null) {
@@ -301,7 +318,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       return;
     }
 
-    // ✅ 获取当前主密钥
     final authState = ref.read(authProvider);
     final currentMasterKey = authState.masterKey;
     if (currentMasterKey == null) {
@@ -319,7 +335,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     setState(() => _isLoading = true);
     try {
-      // ✅ 传入 currentMasterKey
       final success = await BackupService.importBackup(
         filePath,
         recoveryKey,
@@ -328,9 +343,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
       if (success && mounted) {
         ToastUtils.showSuccess(context, '导入成功！');
-        // ✅ 刷新数据
         ref.read(passwordProvider.notifier).loadEntries();
-        // ✅ 返回上一页
         if (mounted) {
           Navigator.pop(context);
         }
@@ -467,7 +480,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<Directory> _getImagesDir() async {
-    // ✅ 与 image_service.dart 保持一致，使用 ApplicationSupportDirectory
     final supportDir = await getApplicationSupportDirectory();
     final imagesDir = Directory('${supportDir.path}/images');
     if (!await imagesDir.exists()) {
@@ -567,6 +579,237 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+// ========== 图片压缩档位选择 ==========
+  Future<void> _showCompressLevelDialog() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('图片压缩'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildCompressOption(
+              context,
+              level: AppConstants.compressLevelOriginal,
+              name: AppConstants.compressLevelNameOriginal,
+              subtitle: AppConstants.compressLevelSubtitleOriginal,
+              isDark: isDark,
+            ),
+            _buildCompressOption(
+              context,
+              level: AppConstants.compressLevelHigh,
+              name: AppConstants.compressLevelNameHigh,
+              subtitle: AppConstants.compressLevelSubtitleHigh,
+              isDark: isDark,
+            ),
+            _buildCompressOption(
+              context,
+              level: AppConstants.compressLevelMedium,
+              name: AppConstants.compressLevelNameMedium,
+              subtitle: AppConstants.compressLevelSubtitleMedium,
+              isDark: isDark,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompressOption(
+      BuildContext context, {
+        required int level,
+        required String name,
+        required String subtitle,
+        required bool isDark,
+      }) {
+    // ✅ 直接读取最新状态
+    final currentLevel = ref.watch(settingsProvider).imageCompressLevel;
+    final isSelected = level == currentLevel;
+
+    return InkWell(
+      onTap: () {
+        ref.read(settingsProvider.notifier).setImageCompressLevel(level);
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        margin: const EdgeInsets.only(bottom: 4),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? Colors.blue.shade800.withValues(alpha: 0.3) : Colors.blue.shade50)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected
+                ? Colors.blue
+                : (isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Radio<int>(
+              value: level,
+              groupValue: currentLevel,  // ✅ 直接从 ref.watch 获取
+              onChanged: (value) {
+                ref.read(settingsProvider.notifier).setImageCompressLevel(level);
+              },
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              Icon(
+                Icons.check_circle,
+                color: Colors.blue,
+                size: 20,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+// // ========== 压力测试 ==========
+//   Future<void> _runStressTest() async {
+//     final confirmed = await ToastUtils.showConfirmDialog(
+//       context,
+//       title: '压力测试',
+//       content: '将生成1000条测试数据，确定继续吗？\n\n注意：会覆盖现有数据！',
+//       confirmText: '开始测试',
+//       isDestructive: false,
+//     );
+//
+//     if (confirmed != true) return;
+//
+//     setState(() => _isLoading = true);
+//
+//     try {
+//       final startTime = DateTime.now();
+//
+//       // ✅ 获取主密钥
+//       final authState = ref.read(authProvider);
+//       final masterKey = authState.masterKey;
+//       if (masterKey == null) {
+//         ToastUtils.showError(context, '请先解锁应用');
+//         setState(() => _isLoading = false);
+//         return;
+//       }
+//
+//       // 生成1000条测试数据
+//       final entries = <PasswordEntry>[];
+//       final now = DateTime.now().millisecondsSinceEpoch;
+//
+//       for (int i = 0; i < 1000; i++) {
+//         // ✅ 生成真实加密密码
+//         final plainPassword = 'Test@123_${i + 1}';
+//         final encryptedPassword = await AESGCMHelper.encrypt(plainPassword, masterKey);
+//
+//         entries.add(
+//           PasswordEntry(
+//             id: Helpers.generateUuid(),
+//             title: '测试账号 ${i + 1}',
+//             username: 'user_${i + 1}@test.com',
+//             encryptedPassword: encryptedPassword,  // ✅ 真实加密密码
+//             notes: '这是第 ${i + 1} 条测试数据，密码: $plainPassword',
+//             appPackageName: null,
+//             createdAt: now + i,
+//             updatedAt: now + i,
+//           ),
+//         );
+//       }
+//
+//       // 批量插入
+//       for (final entry in entries) {
+//         await DatabaseHelper.insertEntry(entry);
+//       }
+//
+//       final endTime = DateTime.now();
+//       final duration = endTime.difference(startTime);
+//
+//       ref.read(passwordProvider.notifier).loadEntries();
+//
+//       if (mounted) {
+//         ToastUtils.showSuccess(
+//           context,
+//           '✅ 压力测试完成\n'
+//               '生成 1000 条数据\n'
+//               '耗时: ${duration.inMilliseconds}ms\n'
+//               '平均: ${(duration.inMilliseconds / 1000).toStringAsFixed(1)}ms/条\n'
+//               '密码格式: Test@123_1 ~ Test@123_1000',
+//         );
+//       }
+//     } catch (e) {
+//       if (mounted) {
+//         ToastUtils.showError(context, '压力测试失败: $e');
+//       }
+//     } finally {
+//       if (mounted) setState(() => _isLoading = false);
+//     }
+//   }
+//   // ========== 清除测试数据 ==========
+//   Future<void> _clearTestData() async {
+//     final confirmed = await ToastUtils.showDangerConfirmDialog(
+//       context,
+//       title: '清除测试数据',
+//       content: '将删除所有标题包含"测试账号"的数据，确定继续吗？',
+//       confirmText: '清除',
+//     );
+//
+//     if (confirmed != true) return;
+//
+//     setState(() => _isLoading = true);
+//
+//     try {
+//       final entries = await DatabaseHelper.getAllEntries();
+//       final testEntries = entries.where((e) => e.title.contains('测试账号')).toList();
+//
+//       for (final entry in testEntries) {
+//         await DatabaseHelper.deleteEntry(entry.id);
+//       }
+//
+//       ref.read(passwordProvider.notifier).loadEntries();
+//
+//       if (mounted) {
+//         ToastUtils.showSuccess(context, '已清除 ${testEntries.length} 条测试数据');
+//       }
+//     } catch (e) {
+//       if (mounted) {
+//         ToastUtils.showError(context, '清除失败: $e');
+//       }
+//     } finally {
+//       if (mounted) setState(() => _isLoading = false);
+//     }
+//   }
+
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
@@ -580,7 +823,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     final List<Widget> items = [
       _buildSectionHeader('安全'),
-      // _buildMenuItem(icon: Icons.lock, title: '修改主密码', onTap: _changeMasterPassword),
       _buildMenuItem(icon: Icons.draw, title: '修改手势图案', onTap: _changeGesture),
       _buildBiometricSection(settings),
       const Divider(),
@@ -594,6 +836,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         onTap: _clearAllData,
         isDestructive: true,
       ),
+      // //====================================================
+      // _buildMenuItem(
+      //   icon: Icons.speed,
+      //   title: '压力测试',
+      //   subtitle: '生成1000条测试数据',
+      //   onTap: _runStressTest,
+      // ),
+      // _buildMenuItem(
+      //   icon: Icons.delete_outline,
+      //   title: '清除测试数据',
+      //   subtitle: '删除所有标题包含"测试账号"的数据',
+      //   onTap: _clearTestData,
+      //   isDestructive: true,
+      // ),
+      // //====================================================
       const Divider(),
       _buildSectionHeader('外观'),
       _buildSwitchItem(
@@ -621,6 +878,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             context,
             MaterialPageRoute(builder: (_) => const BackgroundSettingsPage()),
           );
+        },
+      ),
+      const Divider(),
+      _buildSectionHeader('图片'),
+      _buildMenuItem(
+        icon: Icons.compress,
+        title: '图片压缩',
+        subtitle: '当前: ${settings.compressLevelName} - ${settings.compressLevelSubtitle}',
+        onTap: () {
+          _showCompressLevelDialog();
         },
       ),
       const SizedBox(height: 40),

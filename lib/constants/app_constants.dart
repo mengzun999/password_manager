@@ -81,5 +81,26 @@ class AppConstants {
   static const String keyBackgroundBlur = 'background_blur';            // 背景模糊度 (0-30)
   static const String keyTextColor = 'background_text_color';           // 文字颜色 (ARGB int)
 
+  // ========== ✅ 图片压缩相关 ==========
+// 压缩档位键名
+  static const String keyImageCompressLevel = 'image_compress_level';
 
+// 压缩档位值
+  static const int compressLevelOriginal = 0;
+  static const int compressLevelHigh = 1;
+  static const int compressLevelMedium = 2;
+
+// 各档位对应的 JPEG 质量 (0-100)
+  static const int compressQualityHigh = 90;
+  static const int compressQualityMedium = 75;
+
+// 档位名称
+  static const String compressLevelNameOriginal = '原图';
+  static const String compressLevelNameHigh = '高';
+  static const String compressLevelNameMedium = '中';
+
+// 档位副标题
+  static const String compressLevelSubtitleOriginal = '不压缩，保留原始画质';
+  static const String compressLevelSubtitleHigh = 'JPEG 90%，画质几乎无损';
+  static const String compressLevelSubtitleMedium = 'JPEG 75%，画质良好';
 }

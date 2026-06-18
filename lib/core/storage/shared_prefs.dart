@@ -168,4 +168,19 @@ class SharedPrefs {
     await _prefs!.remove(AppConstants.keyBackgroundBlur);
     await _prefs!.remove(AppConstants.keyTextColor);
   }
+
+  // ========== ✅ 图片压缩相关 ==========
+
+  /// 保存压缩档位 (0=原图, 1=高, 2=中)
+  static Future<void> setImageCompressLevel(int level) async {
+    await _ensureInitialized();
+    await _prefs!.setInt(AppConstants.keyImageCompressLevel, level.clamp(0, 2));
+  }
+
+  /// 获取压缩档位，默认中(2)
+  static Future<int> getImageCompressLevel() async {
+    await _ensureInitialized();
+    return _prefs!.getInt(AppConstants.keyImageCompressLevel) ??
+        AppConstants.compressLevelMedium;
+  }
 }

@@ -1,6 +1,8 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:password_manager/providers/settings_provider.dart';
@@ -27,7 +29,6 @@ class _BackgroundSettingsPageState extends ConsumerState<BackgroundSettingsPage>
     setState(() => _isLoading = true);
 
     try {
-      // 保存到应用私有目录
       final appDir = await getApplicationDocumentsDirectory();
       final fileName = 'background_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final filePath = '${appDir.path}/$fileName';
@@ -35,7 +36,6 @@ class _BackgroundSettingsPageState extends ConsumerState<BackgroundSettingsPage>
       final file = File(image.path);
       await file.copy(filePath);
 
-      // ✅ 设置背景图时自动开启开关
       await ref.read(settingsProvider.notifier).setBackgroundEnabled(true);
       await ref.read(settingsProvider.notifier).setBackgroundImage(filePath);
 
@@ -68,7 +68,6 @@ class _BackgroundSettingsPageState extends ConsumerState<BackgroundSettingsPage>
     setState(() => _isLoading = true);
 
     try {
-      // 删除本地文件
       final settings = ref.read(settingsProvider);
       if (settings.backgroundImagePath != null) {
         final file = File(settings.backgroundImagePath!);
@@ -91,6 +90,109 @@ class _BackgroundSettingsPageState extends ConsumerState<BackgroundSettingsPage>
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  /// ✅ 打开色盘选择颜色（底部弹出）- 带滚动
+  Future<void> _showColorPicker() async {
+    final settings = ref.read(settingsProvider);
+    Color currentColor = settings.textColorValue;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final screenHeight = MediaQuery.of(context).size.height;
+            final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+            return Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey.shade900
+                    : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade400,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '选择文字颜色',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 16),
+                  // ✅ 使用 SingleChildScrollView 包裹色盘
+                  SizedBox(
+                    height: screenHeight * 0.45,
+                    child: SingleChildScrollView(
+                      child: ColorPicker(
+                        pickerColor: currentColor,
+                        onColorChanged: (color) {
+                          setState(() {
+                            currentColor = color;
+                          });
+                          ref.read(settingsProvider.notifier).setTextColor(color.value);
+                        },
+                        pickerAreaHeightPercent: 0.6,
+                        portraitOnly: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: currentColor,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Text(
+                      '预览文字颜色',
+                      style: TextStyle(
+                        color: currentColor.computeLuminance() > 0.5
+                            ? Colors.black
+                            : Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('取消'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('确定'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: bottomPadding + 8),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -131,33 +233,19 @@ class _BackgroundSettingsPageState extends ConsumerState<BackgroundSettingsPage>
 
               const SizedBox(height: 24),
 
-              // 文字颜色选择
-              _buildColorPicker(settings),
+              // ✅ 文字颜色选择 - 使用色盘
+              _buildColorPickerSection(settings),
             ] else ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.image_outlined,
-                      size: 48,
-                      color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Center(
+                  child: Text(
+                    '开启后可以自定义密码列表页背景',
+                    style: TextStyle(
+                      color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
+                      fontSize: 14,
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '开启后可以自定义密码列表页背景',
-                      style: TextStyle(
-                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                        fontSize: 14,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -199,9 +287,7 @@ class _BackgroundSettingsPageState extends ConsumerState<BackgroundSettingsPage>
         value: settings.backgroundEnabled,
         onChanged: (value) {
           ref.read(settingsProvider.notifier).setBackgroundEnabled(value);
-          // 如果关闭，同时清除背景图
           if (!value) {
-            // 删除本地文件
             if (settings.backgroundImagePath != null) {
               final file = File(settings.backgroundImagePath!);
               if (file.existsSync()) {
@@ -244,44 +330,30 @@ class _BackgroundSettingsPageState extends ConsumerState<BackgroundSettingsPage>
               : Colors.white.withValues(alpha: 0.3),
         ),
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.image,
-                size: 48,
-                color: Colors.white.withValues(alpha: 0.5),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '预览效果',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 14,
+          child: Text(
+            '预览效果',
+            style: TextStyle(
+              color: settings.textColorValue,
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 4,
                 ),
-              ),
-            ],
+              ],
+            ),
+            textAlign: TextAlign.center,
           ),
         ),
       )
-          : const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.image_outlined,
-              size: 48,
-              color: Colors.grey,
-            ),
-            SizedBox(height: 8),
-            Text(
-              '请选择一张背景图',
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-              ),
-            ),
-          ],
+          : Center(
+        child: Text(
+          '请选择一张背景图',
+          style: TextStyle(
+            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+            fontSize: 14,
+          ),
         ),
       ),
     );
@@ -395,7 +467,8 @@ class _BackgroundSettingsPageState extends ConsumerState<BackgroundSettingsPage>
     );
   }
 
-  Widget _buildColorPicker(SettingsState settings) {
+  /// ✅ 使用色盘选择文字颜色
+  Widget _buildColorPickerSection(SettingsState settings) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
@@ -410,262 +483,124 @@ class _BackgroundSettingsPageState extends ConsumerState<BackgroundSettingsPage>
           ),
         ),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _buildColorOption(Colors.white, settings),
-            _buildColorOption(Colors.black, settings),
-            _buildColorOption(Colors.grey.shade700, settings),
-            _buildColorOption(Colors.blue.shade700, settings),
-            _buildColorOption(Colors.red.shade700, settings),
-            _buildColorOption(Colors.green.shade700, settings),
-            _buildColorOption(Colors.orange.shade700, settings),
-            _buildColorOption(Colors.purple.shade700, settings),
-            _buildCustomColorOption(settings),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildColorOption(Color color, SettingsState settings) {
-    final isSelected = settings.textColorValue == color;
-    return GestureDetector(
-      onTap: () {
-        ref.read(settingsProvider.notifier).setTextColor(color.value);
-      },
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: isSelected ? Colors.blue : Colors.grey.shade300,
-            width: isSelected ? 3 : 1,
-          ),
-        ),
-        child: isSelected
-            ? const Icon(Icons.check, color: Colors.white, size: 20)
-            : null,
-      ),
-    );
-  }
-
-  Widget _buildCustomColorOption(SettingsState settings) {
-    return GestureDetector(
-      onTap: () async {
-        final color = await showDialog<Color>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('选择颜色'),
-            content: SizedBox(
-              width: 300,
-              height: 300,
-              child: ColorPicker(
-                initialColor: settings.textColorValue,
-                onColorChanged: (color) {
-                  ref.read(settingsProvider.notifier).setTextColor(color.value);
-                },
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('确定'),
-              ),
-            ],
-          ),
-        );
-      },
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: settings.textColorValue,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.grey.shade300,
-            width: 1,
-          ),
-          gradient: const LinearGradient(
-            colors: [Colors.red, Colors.green, Colors.blue],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: const Center(
-          child: Icon(Icons.color_lens, color: Colors.white, size: 20),
-        ),
-      ),
-    );
-  }
-}
-
-// 简单颜色选择器
-class ColorPicker extends StatefulWidget {
-  final Color initialColor;
-  final ValueChanged<Color> onColorChanged;
-
-  const ColorPicker({
-    super.key,
-    required this.initialColor,
-    required this.onColorChanged,
-  });
-
-  @override
-  State<ColorPicker> createState() => _ColorPickerState();
-}
-
-class _ColorPickerState extends State<ColorPicker> {
-  late Color _selectedColor;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedColor = widget.initialColor;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: double.infinity,
-          height: 60,
-          decoration: BoxDecoration(
-            color: _selectedColor,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Center(
-            child: Text(
-              '预览',
-              style: TextStyle(
-                color: _selectedColor.computeLuminance() > 0.5
-                    ? Colors.black
-                    : Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
+        // ✅ 使用 Wrap 替代 Row，自动换行防止溢出
         Wrap(
           spacing: 8,
           runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            _buildPresetColor(Colors.white),
-            _buildPresetColor(Colors.black),
-            _buildPresetColor(Colors.grey),
-            _buildPresetColor(Colors.red),
-            _buildPresetColor(Colors.blue),
-            _buildPresetColor(Colors.green),
-            _buildPresetColor(Colors.orange),
-            _buildPresetColor(Colors.purple),
-            _buildPresetColor(Colors.pink),
-            _buildPresetColor(Colors.teal),
-            _buildPresetColor(Colors.brown),
-            _buildPresetColor(Colors.deepPurple),
+            ..._buildPresetColors(settings, isDark),
+
+            // ✅ 自定义色盘按钮
+            GestureDetector(
+              onTap: _showColorPicker,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.grey.shade400,
+                    width: 2,
+                  ),
+                  gradient: const LinearGradient(
+                    colors: [Colors.red, Colors.green, Colors.blue],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.color_lens,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: 16),
-        const Text('自定义颜色', style: TextStyle(fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
-        _buildSlider('R', Colors.red, _selectedColor.red, (v) {
-          setState(() {
-            _selectedColor = Color.fromARGB(
-              _selectedColor.alpha,
-              v.round(),
-              _selectedColor.green,
-              _selectedColor.blue,
-            );
-            widget.onColorChanged(_selectedColor);
-          });
-        }),
-        _buildSlider('G', Colors.green, _selectedColor.green, (v) {
-          setState(() {
-            _selectedColor = Color.fromARGB(
-              _selectedColor.alpha,
-              _selectedColor.red,
-              v.round(),
-              _selectedColor.blue,
-            );
-            widget.onColorChanged(_selectedColor);
-          });
-        }),
-        _buildSlider('B', Colors.blue, _selectedColor.blue, (v) {
-          setState(() {
-            _selectedColor = Color.fromARGB(
-              _selectedColor.alpha,
-              _selectedColor.red,
-              _selectedColor.green,
-              v.round(),
-            );
-            widget.onColorChanged(_selectedColor);
-          });
-        }),
-      ],
-    );
-  }
-
-  Widget _buildPresetColor(Color color) {
-    final isSelected = _selectedColor == color;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedColor = color;
-          widget.onColorChanged(color);
-        });
-      },
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: isSelected ? Colors.blue : Colors.grey.shade300,
-            width: isSelected ? 3 : 1,
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
           ),
-        ),
-        child: isSelected
-            ? Icon(
-          Icons.check,
-          color: color.computeLuminance() > 0.5 ? Colors.black : Colors.white,
-          size: 16,
-        )
-            : null,
-      ),
-    );
-  }
-
-  Widget _buildSlider(String label, Color color, int value, ValueChanged<double> onChanged) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 20,
-          child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ),
-        Expanded(
-          child: Slider(
-            value: value.toDouble(),
-            min: 0,
-            max: 255,
-            divisions: 255,
-            activeColor: color,
-            onChanged: onChanged,
-          ),
-        ),
-        SizedBox(
-          width: 35,
-          child: Text(
-            value.toString(),
-            style: const TextStyle(fontSize: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '当前颜色：',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: settings.textColorValue,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '#${settings.textColorValue.value.toRadixString(16).padLeft(8, '0').toUpperCase()}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
           ),
         ),
       ],
     );
+  }
+
+  List<Widget> _buildPresetColors(SettingsState settings, bool isDark) {
+    final colors = [
+      Colors.white,
+      Colors.black,
+      Colors.grey.shade700,
+      Colors.blue.shade700,
+      Colors.red.shade700,
+      Colors.green.shade700,
+      Colors.orange.shade700,
+      Colors.purple.shade700,
+    ];
+
+    return colors.map((color) {
+      final isSelected = settings.textColorValue == color;
+      return GestureDetector(
+        onTap: () {
+          ref.read(settingsProvider.notifier).setTextColor(color.value);
+        },
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isSelected ? Colors.blue : (isDark ? Colors.grey.shade600 : Colors.grey.shade300),
+              width: isSelected ? 3 : 1,
+            ),
+          ),
+          child: isSelected
+              ? Icon(
+            Icons.check,
+            color: color.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+            size: 16,
+          )
+              : null,
+        ),
+      );
+    }).toList();
   }
 }

@@ -10,6 +10,7 @@ import '../../constants/app_constants.dart';
 import '../../utils/helpers.dart';
 import '../models/image_model.dart';
 import '../services/permission_service.dart';
+import '../storage/shared_prefs.dart';
 
 // ========== isolate 参数类 ==========
 
@@ -19,12 +20,14 @@ class _SaveImagesParams {
   final String entryId;
   final Uint8List masterKey;
   final int maxCount;
+  final int compressLevel;
 
   _SaveImagesParams({
     required this.imagePaths,
     required this.entryId,
     required this.masterKey,
     required this.maxCount,
+    required this.compressLevel,
   });
 }
 
@@ -54,7 +57,7 @@ class _DecryptThumbnailsParams {
   });
 }
 
-/// ✅ 解密图片参数
+/// 解密图片参数
 class _DecryptImageParams {
   final Uint8List encryptedData;
   final Uint8List masterKey;
@@ -91,7 +94,10 @@ class ImageService {
     // 4. 准备参数
     final paths = limitedFiles.map((f) => f.path).toList();
 
-    // 5. 在 isolate 中处理所有图片加密
+    // 5. 获取压缩档位
+    final compressLevel = await SharedPrefs.getImageCompressLevel();
+
+    // 6. 在 isolate 中处理所有图片加密
     final results = await compute(
       _processImagesInIsolate,
       _SaveImagesParams(
@@ -99,10 +105,11 @@ class ImageService {
         entryId: entryId,
         masterKey: masterKey,
         maxCount: limitedFiles.length,
+        compressLevel: compressLevel,
       ),
     );
 
-    // 6. 保存到文件系统和数据库
+    // 7. 保存到文件系统和数据库
     final imagesDir = await _getImagesDir();
     final savedImages = <ImageModel>[];
 
@@ -112,13 +119,11 @@ class ImageService {
       final imageFilename = '$imageId.enc';
       final thumbnailFilename = '${imageId}_thumb.enc';
 
-      // 保存加密图片到文件
       await File('${imagesDir.path}/$imageFilename')
           .writeAsBytes(result.encryptedImage);
       await File('${imagesDir.path}/$thumbnailFilename')
           .writeAsBytes(result.encryptedThumbnail);
 
-      // 创建 ImageModel
       final imageModel = ImageModel(
         id: imageId,
         entryId: entryId,
@@ -144,28 +149,58 @@ class ImageService {
     for (final path in params.imagePaths) {
       try {
         // 读取原始图片
-        final originalBytes = File(path).readAsBytesSync();
+        Uint8List originalBytes = File(path).readAsBytesSync();
 
-        // 生成缩略图
+        // 根据压缩档位处理原图
+        Uint8List imageToEncrypt;
+        final compressLevel = params.compressLevel;
+
+        if (compressLevel == AppConstants.compressLevelOriginal) {
+          // 原图：不压缩
+          imageToEncrypt = originalBytes;
+        } else {
+          // 压缩：转 JPEG 格式
+          try {
+            final image = img.decodeImage(originalBytes);
+            if (image != null) {
+              int quality;
+              switch (compressLevel) {
+                case AppConstants.compressLevelHigh:
+                  quality = AppConstants.compressQualityHigh;
+                  break;
+                case AppConstants.compressLevelMedium:
+                  quality = AppConstants.compressQualityMedium;
+                  break;
+                default:
+                  quality = AppConstants.compressQualityMedium;
+              }
+              imageToEncrypt = Uint8List.fromList(
+                img.encodeJpg(image, quality: quality),
+              );
+            } else {
+              imageToEncrypt = originalBytes;
+            }
+          } catch (e) {
+            imageToEncrypt = originalBytes;
+          }
+        }
+
+        // 生成缩略图（固定 200x200，质量 80%）
         final thumbnailBytes = _generateThumbnailSync(originalBytes);
 
-        // 加密原始图片
-        final encryptedImage = AESGCMHelper.encryptBytesSync(originalBytes, params.masterKey);
-
-        // 加密缩略图
+        // 加密图片
+        final encryptedImage = AESGCMHelper.encryptBytesSync(imageToEncrypt, params.masterKey);
         final encryptedThumbnail = AESGCMHelper.encryptBytesSync(thumbnailBytes, params.masterKey);
 
-        // 获取 MIME 类型
         final mimeType = _getMimeTypeFromPath(path);
 
         results.add(_SingleImageResult(
           encryptedImage: encryptedImage,
           encryptedThumbnail: encryptedThumbnail,
           mimeType: mimeType,
-          fileSize: originalBytes.length,
+          fileSize: imageToEncrypt.length,
         ));
       } catch (e) {
-        // 单张图片处理失败，跳过
         continue;
       }
     }
@@ -173,7 +208,7 @@ class ImageService {
     return results;
   }
 
-  /// ✅ 在 isolate 中批量解密缩略图
+  /// 在 isolate 中批量解密缩略图
   static List<Uint8List> _decryptThumbnailsInIsolate(
       _DecryptThumbnailsParams params,
       ) {
@@ -195,7 +230,7 @@ class ImageService {
     return results;
   }
 
-  /// ✅ 在 isolate 中解密图片
+  /// 在 isolate 中解密图片
   static Uint8List _decryptImageInIsolate(_DecryptImageParams params) {
     try {
       return AESGCMHelper.decryptBytesSync(params.encryptedData, params.masterKey);
@@ -322,7 +357,7 @@ class ImageService {
     }
   }
 
-  /// ✅ 在 isolate 中加载原图（不阻塞 UI）
+  /// 在 isolate 中加载原图（不阻塞 UI）
   static Future<Uint8List?> loadImageInIsolate(
       ImageModel image,
       Uint8List masterKey,
@@ -343,7 +378,6 @@ class ImageService {
         ),
       );
 
-      // 如果解密结果为空，返回 null
       if (decryptedBytes.isEmpty) return null;
       return decryptedBytes;
     } catch (e) {
@@ -374,7 +408,6 @@ class ImageService {
       ) async {
     if (images.isEmpty) return [];
 
-    // 先读取所有加密的缩略图文件
     final imagesDir = await _getImagesDir();
     final encryptedThumbnails = <Uint8List>[];
 
@@ -392,7 +425,6 @@ class ImageService {
       }
     }
 
-    // ✅ 批量解密缩略图（在 isolate 中并发处理）
     return await compute(
       _decryptThumbnailsInIsolate,
       _DecryptThumbnailsParams(

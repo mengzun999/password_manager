@@ -78,6 +78,10 @@ dependencies:
   # 设备信息（获取 Android SDK 版本）
   device_info_plus: ^10.1.2
 
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.0
+  flutter_colorpicker: ^1.1.0
+
 
 
 dev_dependencies:
@@ -102,7 +106,19 @@ flutter:
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
+
   uses-material-design: true
+
+flutter_native_splash:
+  android_12:
+    color: "#ffffff"
+    color_dark: "#000000"
+    image: assets/images/logo/logo.png
+    image_dark: assets/images/logo/logo.png
+  color: "#ffffff"
+  color_dark: "#000000"
+  image: assets/images/logo/logo.png
+  image_dark: assets/images/logo/logo.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -134,3 +150,17 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+flutter_launcher_icons:
+  android: true
+  ios: false
+  remove_alpha_ios: true
+  image_path: assets/images/logo/logo.png
+  adaptive_icon_background: "#ffffff"
+  adaptive_icon_background_dark: "#000000"
+  adaptive_icon_foreground: assets/images/logo/logo.png
+  adaptive_icon_foreground_dark: assets/images/logo/logo.png
+
+  adaptive_icon_monochrome: assets/images/logo/logo.png
+  macos:
+    generate: true
+    image_path: assets/images/logo/logo.png

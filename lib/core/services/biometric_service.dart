@@ -7,8 +7,8 @@ import 'package:flutter/foundation.dart';
 class BiometricService {
   static final LocalAuthentication _localAuth = LocalAuthentication();
 
-  /// 检查设备是否支持生物识别
-  static Future<bool> isAvailable() async {
+  /// ✅ 检查设备是否支持生物识别（硬件支持）
+  static Future<bool> isHardwareAvailable() async {
     try {
       final canCheck = await _localAuth.canCheckBiometrics;
       final isSupported = await _localAuth.isDeviceSupported();
@@ -18,7 +18,30 @@ class BiometricService {
     }
   }
 
-  /// 获取支持的生物识别类型列表
+  /// ✅ 检查是否已录入生物识别信息（指纹/人脸已注册）
+  static Future<bool> isBiometricEnrolled() async {
+    try {
+      final types = await _localAuth.getAvailableBiometrics();
+      return types.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// ✅ 综合判断：硬件支持 且 已录入指纹/人脸
+  static Future<bool> isAvailable() async {
+    try {
+      final hardwareOk = await isHardwareAvailable();
+      if (!hardwareOk) return false;
+
+      final types = await _localAuth.getAvailableBiometrics();
+      return types.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// 获取支持的生物识别类型列表（仅返回已录入的）
   static Future<List<BiometricType>> getAvailableTypes() async {
     try {
       final types = await _localAuth.getAvailableBiometrics();
@@ -28,30 +51,31 @@ class BiometricService {
     }
   }
 
-  /// 检查是否支持指纹（兼容新旧 Android）
+  /// ✅ 检查是否支持指纹（硬件支持 且 已录入指纹）
   static Future<bool> hasFingerprint() async {
     try {
-      final types = await getAvailableTypes();
+      final hardwareOk = await isHardwareAvailable();
+      if (!hardwareOk) return false;
 
-      // Android 10+ 返回 strong（指纹），旧版返回 fingerprint
+      final types = await _localAuth.getAvailableBiometrics();
+
+      // 检查是否有指纹类型的生物识别已录入
       if (types.contains(BiometricType.fingerprint)) return true;
-      if (types.contains(BiometricType.strong)) return true;
+      if (types.contains(BiometricType.strong)) return true;  // Android 10+ 强生物识别
 
-      // 兜底：检查硬件支持
-      return await isAvailable();
+      return false;
     } catch (e) {
       return false;
     }
   }
 
   /// 进行生物识别验证
-  /// 进行生物识别验证
   static Future<bool> authenticate({required String reason}) async {
     try {
       final isAuthenticated = await _localAuth.authenticate(
         localizedReason: reason,
         biometricOnly: true,
-        persistAcrossBackgrounding: true,  // 原 stickyAuth
+        persistAcrossBackgrounding: true,
       );
       return isAuthenticated;
     } catch (e) {
