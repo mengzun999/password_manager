@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:ui';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,7 @@ import 'package:password_manager/core/models/password_entry.dart';
 import 'package:password_manager/core/storage/shared_prefs.dart';
 import 'package:password_manager/providers/auth_provider.dart';
 import 'package:password_manager/providers/password_provider.dart';
+import 'package:password_manager/providers/settings_provider.dart';
 import 'package:password_manager/utils/helpers.dart';
 import 'package:password_manager/utils/toast_utils.dart';
 
@@ -22,6 +25,9 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
   bool _isDragging = false;
   bool _isPositionLoaded = false;
   final FocusNode _searchFocusNode = FocusNode();
+
+  // ✅ 用于判断是否滚动了
+  bool _isScrolled = false;
 
   @override
   void dispose() {
@@ -132,101 +138,220 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
     });
   }
 
+  // ✅ 监听滚动，更新 _isScrolled
+  void _onScroll(double offset) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FocusScope.of(context).unfocus();
+    });
+    final isScrolled = offset > 10;
+    if (_isScrolled != isScrolled) {
+      setState(() {
+        _isScrolled = isScrolled;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final passwordState = ref.watch(passwordProvider);
     final masterKey = ref.watch(masterKeyProvider);
+    final settings = ref.watch(settingsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final isLoading = passwordState.isLoading;
     final filteredEntries = passwordState.filteredEntries;
     final searchKeyword = passwordState.searchKeyword;
 
+    final showBackground = !isDark && settings.showBackground;
+
+    // ✅ AppBar 背景色
+    Color getAppBarBackground() {
+      if (!_isScrolled) return Colors.transparent;
+      if (showBackground) {
+        return Colors.white.withValues(alpha: 0.7);
+      } else {
+        return isDark ? Colors.grey.shade900 : Colors.grey.shade100;
+      }
+    }
+
+    // ✅ 搜索框背景色（滚动后跟随 AppBar）
+    Color getSearchFillColor() {
+      if (isDark) return Colors.grey.shade800;
+      if (showBackground) {
+        return settings.cardBackgroundColor;
+      }
+      return Colors.white;
+    }
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('密码管家'),
-        centerTitle: false,
-        backgroundColor: isDark ? Colors.grey.shade900 : null,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.pushNamed(context, AppRoutes.settings);
-            },
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60),
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              focusNode: _searchFocusNode,
-              autofocus: false,
-              style: TextStyle(
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-              decoration: InputDecoration(
-                hintText: '搜索标题、用户名或备注...',
-                hintStyle: TextStyle(
-                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                ),
-                prefixIcon: Icon(
-                  Icons.search,
-                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                ),
-                suffixIcon: searchKeyword.isNotEmpty
-                    ? IconButton(
-                  icon: Icon(
-                    Icons.clear,
-                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                  ),
-                  onPressed: () {
-                    ref.read(passwordProvider.notifier).clearSearch();
-                  },
-                )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(
-                    color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(
-                    color: Theme.of(context).primaryColor,
-                  ),
-                ),
-                filled: true,
-                fillColor: isDark ? Colors.grey.shade800 : Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-              ),
-              onChanged: (value) {
-                ref.read(passwordProvider.notifier).search(value);
-              },
-            ),
-          ),
-        ),
-      ),
+      resizeToAvoidBottomInset: false,
+      backgroundColor: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
       body: Stack(
         children: [
-          isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : filteredEntries.isEmpty
-              ? _buildEmptyState()
-              : RefreshIndicator(
-            onRefresh: _refresh,
-            child: ListView.builder(
-              itemCount: filteredEntries.length,
-              itemBuilder: (context, index) {
-                final entry = filteredEntries[index];
-                return _buildEntryCard(entry, masterKey);
-              },
+          // ✅ 背景图
+          if (showBackground)
+            Positioned.fill(
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(
+                  sigmaX: settings.backgroundBlur.toDouble(),
+                  sigmaY: settings.backgroundBlur.toDouble(),
+                ),
+                child: Image.file(
+                  File(settings.backgroundImagePath!),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+
+          if (showBackground)
+            Positioned.fill(
+              child: Container(
+                color: Colors.white.withValues(alpha: 0.3),
+              ),
+            ),
+
+          // ✅ 主内容
+          NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification is ScrollUpdateNotification) {
+                _onScroll(notification.metrics.pixels);
+              }
+              return false;
+            },
+            child: CustomScrollView(
+              slivers: [
+                // ========== SliverAppBar ==========
+                SliverAppBar(
+                  pinned: true,
+                  elevation: 0,
+                  backgroundColor: Colors.transparent,
+                  // ✅ 始终显示标题
+                  title: Text(
+                    '密码管家',
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  centerTitle: false,
+                  actions: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.settings,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                      onPressed: () {
+                        Navigator.pushNamed(context, AppRoutes.settings);
+                      },
+                    ),
+                  ],
+                  flexibleSpace: FlexibleSpaceBar(
+                    background: Container(
+                      decoration: BoxDecoration(
+                        color: getAppBarBackground(),
+                      ),
+                      child: (_isScrolled && showBackground)
+                          ? BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(color: Colors.transparent),
+                      )
+                          : null,
+                    ),
+                  ),
+                  bottom: PreferredSize(
+                    preferredSize: const Size.fromHeight(60),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: TextField(
+                        focusNode: _searchFocusNode,
+                        autofocus: false,
+                        style: TextStyle(
+                          color: isDark ? Colors.white : settings.textColorValue,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: '搜索标题、用户名或备注...',
+                          hintStyle: TextStyle(
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : settings.textColorValue.withValues(alpha: 0.6),
+                          ),
+                          prefixIcon: Icon(
+                            Icons.search,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : settings.textColorValue.withValues(alpha: 0.6),
+                          ),
+                          suffixIcon: searchKeyword.isNotEmpty
+                              ? IconButton(
+                            icon: Icon(
+                              Icons.clear,
+                              color: isDark
+                                  ? Colors.grey.shade400
+                                  : settings.textColorValue.withValues(alpha: 0.6),
+                            ),
+                            onPressed: () {
+                              ref.read(passwordProvider.notifier).clearSearch();
+                            },
+                          )
+                              : null,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? Colors.grey.shade700
+                                  : (showBackground
+                                  ? settings.textColorValue.withValues(alpha: 0.3)
+                                  : Colors.grey.shade300),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(
+                              color: Theme.of(context).primaryColor,
+                            ),
+                          ),
+                          filled: true,
+                          fillColor: getSearchFillColor(),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                        ),
+                        onChanged: (value) {
+                          ref.read(passwordProvider.notifier).search(value);
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+
+                // ========== 列表内容 ==========
+                if (isLoading)
+                  const SliverFillRemaining(
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (filteredEntries.isEmpty)
+                  SliverFillRemaining(
+                    child: _buildEmptyState(),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.only(bottom: 80),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                          final entry = filteredEntries[index];
+                          return _buildEntryCard(entry, masterKey);
+                        },
+                        childCount: filteredEntries.length,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
+
+          // ✅ 悬浮球
           if (_isPositionLoaded)
             Positioned(
               left: _fabPosition.dx,
@@ -273,6 +398,8 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
 
   Widget _buildEmptyState() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final settings = ref.watch(settingsProvider);
+    final textColor = isDark ? Colors.white : settings.textColorValue;
 
     return Center(
       child: Column(
@@ -281,14 +408,14 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
           Icon(
             Icons.lock_outline,
             size: 80,
-            color: isDark ? Colors.grey.shade600 : Colors.grey[400],
+            color: isDark ? Colors.grey.shade600 : textColor.withValues(alpha: 0.4),
           ),
           const SizedBox(height: 16),
           Text(
             '还没有任何密码',
             style: TextStyle(
               fontSize: 18,
-              color: isDark ? Colors.grey.shade300 : Colors.grey[600],
+              color: isDark ? Colors.grey.shade300 : textColor,
             ),
           ),
           const SizedBox(height: 8),
@@ -296,7 +423,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
             '点击右下角 + 按钮添加你的第一个密码',
             style: TextStyle(
               fontSize: 14,
-              color: isDark ? Colors.grey.shade500 : Colors.grey[500],
+              color: isDark ? Colors.grey.shade500 : textColor.withValues(alpha: 0.6),
             ),
           ),
         ],
@@ -306,10 +433,15 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
 
   Widget _buildEntryCard(PasswordEntry entry, Uint8List? masterKey) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final settings = ref.watch(settingsProvider);
+    final showBackground = settings.showBackground;
+    final textColor = isDark ? Colors.white : settings.textColorValue;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      color: isDark ? Colors.grey.shade800 : Colors.white,
+      color: isDark
+          ? Colors.grey.shade800
+          : (showBackground ? settings.cardBackgroundColor : Colors.white),
       elevation: isDark ? 0 : 1,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -360,7 +492,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: isDark ? Colors.white : Colors.black87,
+                        color: textColor,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -371,7 +503,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                         entry.username!,
                         style: TextStyle(
                           fontSize: 13,
-                          color: isDark ? Colors.grey.shade400 : Colors.grey[600],
+                          color: textColor.withValues(alpha: 0.7),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -380,7 +512,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                       Helpers.formatDate(entry.updatedAt),
                       style: TextStyle(
                         fontSize: 11,
-                        color: isDark ? Colors.grey.shade500 : Colors.grey[500],
+                        color: textColor.withValues(alpha: 0.5),
                       ),
                     ),
                   ],
@@ -394,7 +526,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                       icon: Icon(
                         Icons.person_outline,
                         size: 20,
-                        color: isDark ? Colors.grey.shade400 : Colors.grey[600],
+                        color: textColor.withValues(alpha: 0.6),
                       ),
                       onPressed: () => _copyToClipboard(entry.username!, '用户名'),
                       tooltip: '复制用户名',
@@ -403,7 +535,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                     icon: Icon(
                       Icons.copy,
                       size: 20,
-                      color: isDark ? Colors.grey.shade400 : Colors.grey[600],
+                      color: textColor.withValues(alpha: 0.6),
                     ),
                     onPressed: () {
                       _copyPassword(entry);
@@ -421,10 +553,15 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
 
   void _showBottomSheet(PasswordEntry entry, Uint8List? masterKey) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final settings = ref.watch(settingsProvider);
+    final showBackground = settings.showBackground;
+    final textColor = isDark ? Colors.white : settings.textColorValue;
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: isDark ? Colors.grey.shade800 : Colors.white,
+      backgroundColor: isDark
+          ? Colors.grey.shade800
+          : (showBackground ? settings.cardBackgroundColor : Colors.white),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -433,10 +570,10 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(Icons.edit, color: isDark ? Colors.white : null),
+              leading: Icon(Icons.edit, color: textColor),
               title: Text(
                 '编辑',
-                style: TextStyle(color: isDark ? Colors.white : null),
+                style: TextStyle(color: textColor),
               ),
               onTap: () {
                 Navigator.pop(context);
@@ -451,10 +588,10 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
             ),
             if (entry.username != null && entry.username!.isNotEmpty)
               ListTile(
-                leading: Icon(Icons.copy, color: isDark ? Colors.white : null),
+                leading: Icon(Icons.copy, color: textColor),
                 title: Text(
                   '复制用户名',
-                  style: TextStyle(color: isDark ? Colors.white : null),
+                  style: TextStyle(color: textColor),
                 ),
                 onTap: () {
                   Navigator.pop(context);
@@ -462,10 +599,10 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                 },
               ),
             ListTile(
-              leading: Icon(Icons.copy, color: isDark ? Colors.white : null),
+              leading: Icon(Icons.copy, color: textColor),
               title: Text(
                 '复制密码',
-                style: TextStyle(color: isDark ? Colors.white : null),
+                style: TextStyle(color: textColor),
               ),
               onTap: () {
                 Navigator.pop(context);

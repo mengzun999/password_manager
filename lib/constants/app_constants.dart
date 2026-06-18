@@ -75,4 +75,9 @@ class AppConstants {
   // 加密存储的 masterKey（用于恢复密钥）
   static const String keyEncryptedMasterKeyForRecovery =
       'encrypted_master_key_for_recovery';
+  // ========== 背景图相关 SharedPreferences 键名 ==========
+  static const String keyBackgroundImagePath = 'background_image_path';  // 背景图本地路径
+  static const String keyBackgroundOpacity = 'background_opacity';      // 卡片透明度 (0-100)
+  static const String keyBackgroundBlur = 'background_blur';            // 背景模糊度 (0-30)
+  static const String keyTextColor = 'background_text_color';           // 文字颜色 (ARGB int)
 }

@@ -17,6 +17,7 @@ import 'package:password_manager/providers/password_provider.dart';
 import 'package:password_manager/providers/settings_provider.dart';
 import 'package:password_manager/widgets/gesture_pattern_view.dart';
 import '../../utils/toast_utils.dart';
+import 'background_settings_page.dart';
 import 'biometric_setup.dart';
 import 'gesture_setup_page.dart';
 import 'dart:async';
@@ -610,6 +611,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         onChanged: settings.darkModeFollowSystem
             ? (_) {}
             : (value) => ref.read(settingsProvider.notifier).toggleDarkMode(value),
+      ),
+      _buildMenuItem(
+        icon: Icons.image,
+        title: '背景图设置',
+        subtitle: '自定义密码列表页背景',
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const BackgroundSettingsPage()),
+          );
+        },
       ),
       const SizedBox(height: 40),
     ];

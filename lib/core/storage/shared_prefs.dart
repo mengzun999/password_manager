@@ -86,4 +86,86 @@ class SharedPrefs {
     }
     return null;
   }
+
+// ========== ✅ 背景图相关 ==========
+
+  /// 保存背景图开关状态
+  static Future<void> setBackgroundEnabled(bool enabled) async {
+    await _ensureInitialized();
+    await _prefs!.setBool('background_enabled', enabled);
+  }
+
+  /// 获取背景图开关状态
+  static Future<bool> isBackgroundEnabled() async {
+    await _ensureInitialized();
+    return _prefs!.getBool('background_enabled') ?? false;
+  }
+
+  /// 保存背景图路径
+  static Future<void> setBackgroundImagePath(String? path) async {
+    await _ensureInitialized();
+    if (path == null) {
+      await _prefs!.remove(AppConstants.keyBackgroundImagePath);
+    } else {
+      await _prefs!.setString(AppConstants.keyBackgroundImagePath, path);
+    }
+  }
+
+  /// 获取背景图路径
+  static Future<String?> getBackgroundImagePath() async {
+    await _ensureInitialized();
+    return _prefs!.getString(AppConstants.keyBackgroundImagePath);
+  }
+
+  /// 保存卡片透明度 (0-100)
+  static Future<void> setBackgroundOpacity(int value) async {
+    await _ensureInitialized();
+    await _prefs!.setInt(AppConstants.keyBackgroundOpacity, value.clamp(0, 100));
+  }
+
+  /// 获取卡片透明度
+  static Future<int> getBackgroundOpacity() async {
+    await _ensureInitialized();
+    return _prefs!.getInt(AppConstants.keyBackgroundOpacity) ?? 30;
+  }
+
+  /// 保存背景模糊度 (0-30)
+  static Future<void> setBackgroundBlur(int value) async {
+    await _ensureInitialized();
+    await _prefs!.setInt(AppConstants.keyBackgroundBlur, value.clamp(0, 30));
+  }
+
+  /// 获取背景模糊度
+  static Future<int> getBackgroundBlur() async {
+    await _ensureInitialized();
+    return _prefs!.getInt(AppConstants.keyBackgroundBlur) ?? 10;
+  }
+
+  /// 保存文字颜色 (ARGB int)
+  static Future<void> setTextColor(int color) async {
+    await _ensureInitialized();
+    await _prefs!.setInt(AppConstants.keyTextColor, color);
+  }
+
+  /// 获取文字颜色
+  static Future<int> getTextColor() async {
+    await _ensureInitialized();
+    return _prefs!.getInt(AppConstants.keyTextColor) ?? 0xFF000000;
+  }
+
+  /// 检查是否有背景图
+  static Future<bool> hasBackgroundImage() async {
+    final path = await getBackgroundImagePath();
+    return path != null && path.isNotEmpty;
+  }
+
+  /// 清除所有背景图设置（恢复默认）
+  static Future<void> resetBackgroundSettings() async {
+    await _ensureInitialized();
+    await _prefs!.remove('background_enabled');
+    await _prefs!.remove(AppConstants.keyBackgroundImagePath);
+    await _prefs!.remove(AppConstants.keyBackgroundOpacity);
+    await _prefs!.remove(AppConstants.keyBackgroundBlur);
+    await _prefs!.remove(AppConstants.keyTextColor);
+  }
 }
