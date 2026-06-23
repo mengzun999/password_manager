@@ -1,14 +1,19 @@
+
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/app_constants.dart';
 import '../core/storage/shared_prefs.dart';
+import '../core/services/biometric_service.dart';
 
 class SettingsState {
   final bool isDarkMode;
   final bool isBiometricEnabled;
   final bool darkModeFollowSystem;
   final bool isLoading;
+
+  // ✅ 生物识别可用状态（新增）
+  final bool isBiometricAvailable;
 
   // ✅ 背景图相关
   final bool backgroundEnabled;
@@ -25,6 +30,7 @@ class SettingsState {
     this.isBiometricEnabled = false,
     this.darkModeFollowSystem = false,
     this.isLoading = true,
+    this.isBiometricAvailable = false, // ✅ 新增
     this.backgroundEnabled = false,
     this.backgroundImagePath,
     this.backgroundOpacity = 30,
@@ -38,6 +44,7 @@ class SettingsState {
     bool? isBiometricEnabled,
     bool? darkModeFollowSystem,
     bool? isLoading,
+    bool? isBiometricAvailable, // ✅ 新增
     bool? backgroundEnabled,
     String? backgroundImagePath,
     int? backgroundOpacity,
@@ -50,6 +57,7 @@ class SettingsState {
       isBiometricEnabled: isBiometricEnabled ?? this.isBiometricEnabled,
       darkModeFollowSystem: darkModeFollowSystem ?? this.darkModeFollowSystem,
       isLoading: isLoading ?? this.isLoading,
+      isBiometricAvailable: isBiometricAvailable ?? this.isBiometricAvailable, // ✅ 新增
       backgroundEnabled: backgroundEnabled ?? this.backgroundEnabled,
       backgroundImagePath: backgroundImagePath ?? this.backgroundImagePath,
       backgroundOpacity: backgroundOpacity ?? this.backgroundOpacity,
@@ -159,11 +167,23 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final textColor = await SharedPrefs.getTextColor();
     final imageCompressLevel = await SharedPrefs.getImageCompressLevel();
 
+    // ✅ 从缓存读取生物识别可用状态
+    final hasCache = await SharedPrefs.hasCachedBiometricData();
+    bool isBiometricAvailable = false;
+
+    if (hasCache) {
+      isBiometricAvailable = await SharedPrefs.getCachedBiometricAvailability();
+    } else {
+      // 没有缓存则异步检测（不阻塞 UI）
+      _cacheBiometricStatus();
+    }
+
     state = state.copyWith(
       isDarkMode: isDarkMode,
       isBiometricEnabled: isBiometricEnabled,
       darkModeFollowSystem: darkModeFollowSystem,
       isLoading: false,
+      isBiometricAvailable: isBiometricAvailable, // ✅
       backgroundEnabled: backgroundEnabled,
       backgroundImagePath: backgroundImagePath,
       backgroundOpacity: backgroundOpacity,
@@ -171,6 +191,27 @@ class SettingsNotifier extends Notifier<SettingsState> {
       textColor: textColor,
       imageCompressLevel: imageCompressLevel,
     );
+  }
+
+  /// ✅ 异步检测生物识别并缓存（不阻塞 UI）
+  Future<void> _cacheBiometricStatus() async {
+    final isAvailable = await BiometricService.isAvailable();
+    await SharedPrefs.cacheBiometricAvailability(isAvailable);
+
+    if (isAvailable) {
+      final types = await BiometricService.getAvailableTypes();
+      final typeNames = types.map((e) => e.toString()).toList();
+      await SharedPrefs.cacheBiometricTypes(typeNames);
+    }
+
+    // 更新状态
+    state = state.copyWith(isBiometricAvailable: isAvailable);
+  }
+
+  /// ✅ 刷新生物识别状态（当用户从设置页返回时调用）
+  Future<void> refreshBiometricStatus() async {
+    final isAvailable = await BiometricService.refreshAvailability();
+    state = state.copyWith(isBiometricAvailable: isAvailable);
   }
 
   Future<void> toggleDarkMode(bool value) async {

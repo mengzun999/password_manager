@@ -1,6 +1,9 @@
+// core/services/biometric_service.dart
+
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import '../storage/shared_prefs.dart';
 
 /// 生物识别服务类
 /// 负责指纹、人脸等生物识别验证
@@ -41,6 +44,43 @@ class BiometricService {
     }
   }
 
+  /// ✅ 获取生物识别可用状态（优先从缓存读取）
+  static Future<bool> getAvailableWithCache() async {
+    // 1. 先检查缓存
+    final hasCache = await SharedPrefs.hasCachedBiometricData();
+    if (hasCache) {
+      return await SharedPrefs.getCachedBiometricAvailability();
+    }
+
+    // 2. 没有缓存则检测并缓存
+    final available = await isAvailable(); // ✅ 修复：使用不同的变量名
+    await SharedPrefs.cacheBiometricAvailability(available);
+
+    if (available) {
+      final types = await _localAuth.getAvailableBiometrics();
+      final typeNames = types.map((e) => e.toString()).toList();
+      await SharedPrefs.cacheBiometricTypes(typeNames);
+    }
+
+    return available;
+  }
+
+  /// ✅ 强制刷新生物识别状态（当用户修改了系统指纹设置后调用）
+  static Future<bool> refreshAvailability() async {
+    final available = await isAvailable(); // ✅ 修复：使用不同的变量名
+    await SharedPrefs.cacheBiometricAvailability(available);
+
+    if (available) {
+      final types = await _localAuth.getAvailableBiometrics();
+      final typeNames = types.map((e) => e.toString()).toList();
+      await SharedPrefs.cacheBiometricTypes(typeNames);
+    } else {
+      await SharedPrefs.clearBiometricCache();
+    }
+
+    return available;
+  }
+
   /// 获取支持的生物识别类型列表（仅返回已录入的）
   static Future<List<BiometricType>> getAvailableTypes() async {
     try {
@@ -61,7 +101,7 @@ class BiometricService {
 
       // 检查是否有指纹类型的生物识别已录入
       if (types.contains(BiometricType.fingerprint)) return true;
-      if (types.contains(BiometricType.strong)) return true;  // Android 10+ 强生物识别
+      if (types.contains(BiometricType.strong)) return true; // Android 10+ 强生物识别
 
       return false;
     } catch (e) {

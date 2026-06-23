@@ -113,8 +113,33 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
       _titleController.text = widget.entry!.title;
       _usernameController.text = widget.entry!.username ?? '';
       _notesController.text = widget.entry!.notes ?? '';
+
+      // ✅ 如果有加密密码，解密后填充
+      _loadPasswordForEditing();
     } else if (widget.presetTitle != null) {
       _titleController.text = widget.presetTitle!;
+    }
+  }
+
+// ✅ 新增：加载密码（解密后填充）
+  Future<void> _loadPasswordForEditing() async {
+    if (widget.entry == null) return;
+    if (widget.entry!.encryptedPassword == null) return;
+
+    final masterKey = _getMasterKey();
+    if (masterKey == null) return;
+
+    try {
+      final decrypted = await AESGCMHelper.decrypt(
+        widget.entry!.encryptedPassword!,
+        masterKey,
+      );
+      if (mounted) {
+        _passwordController.text = decrypted;
+      }
+    } catch (e) {
+      // 解密失败，留空
+      debugPrint('解密密码失败: $e');
     }
   }
 
@@ -389,7 +414,9 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
     final now = Helpers.currentTimestamp();
     final masterKey = _getMasterKey();
     if (masterKey == null) {
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context); // 关闭加载对话框
+      }
       setState(() {
         _isLoading = false;
         _error = '未解锁，请重新登录';
@@ -430,10 +457,10 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
           _pendingThumbnails.clear();
         }
 
-        if (mounted) Navigator.pop(context);
-        setState(() => _isLoading = false);
+        // ✅ 修复：关闭加载对话框，然后返回结果
         if (mounted) {
-          Navigator.pop(context, true);
+          Navigator.pop(context); // 关闭加载对话框
+          Navigator.pop(context, true); // 返回上一页，传递成功标志
         }
         return;
       }
@@ -465,13 +492,16 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
         _pendingThumbnails.clear();
       }
 
-      if (mounted) Navigator.pop(context);
-      setState(() => _isLoading = false);
+      // ✅ 修复：关闭加载对话框，然后返回结果
       if (mounted) {
-        Navigator.pop(context, true);
+        Navigator.pop(context); // 关闭加载对话框
+        Navigator.pop(context, true); // 返回上一页，传递成功标志
       }
     } catch (e) {
-      if (mounted) Navigator.pop(context);
+      // ✅ 异常时关闭加载对话框
+      if (mounted) {
+        Navigator.pop(context); // 关闭加载对话框
+      }
       setState(() {
         _isLoading = false;
         _error = '保存失败: $e';

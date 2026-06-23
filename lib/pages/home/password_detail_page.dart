@@ -2,7 +2,9 @@
 
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:password_manager/app.dart';
 import 'package:password_manager/core/crypto/aes_gcm.dart';
 import 'package:password_manager/core/models/password_entry.dart';
@@ -16,208 +18,178 @@ import '../../utils/toast_utils.dart';
 
 /// 密码详情页面
 class PasswordDetailPage extends ConsumerStatefulWidget {
-  final String entryId;
+  final PasswordEntry entry;  // ✅ 直接接收 Entry 对象
 
-  const PasswordDetailPage({super.key, required this.entryId});
+  const PasswordDetailPage({super.key, required this.entry});
 
   @override
   ConsumerState<PasswordDetailPage> createState() => _PasswordDetailPageState();
 }
 
-class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
-  // ========== 密码数据 ==========
-  PasswordEntry? _entry;
-  bool _isLoading = true;
+class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> with WidgetsBindingObserver {
+  // ========== 数据 ==========
+  late PasswordEntry _entry;
 
   // ========== 密码显示 ==========
   bool _passwordHidden = true;
   String? _decryptedPassword;
   bool _isDecrypting = false;
 
-  // ========== 图片数据 ==========
+  // ========== 图片 ==========
   List<ImageModel> _imageModels = [];
   List<Uint8List> _imageThumbnails = [];
   bool _isLoadingImages = false;
-
-  // ✅ 修复：使用 imageModel.id 作为缓存键，而不是 index
-  final Map<String, Uint8List> _cachedFullImages = {};
-
-  // ✅ 点击图片加载状态
-  bool _isLoadingFullImage = false;
-
-  // ✅ 页面是否已销毁
   bool _isDisposed = false;
 
-  // ========== 生命周期方法 ==========
+  // ✅ 缓存
+  final Map<String, Uint8List> _cachedFullImages = {};
+  bool _isLoadingFullImage = false;
 
   @override
   void initState() {
     super.initState();
-    _loadEntry();
+    WidgetsBinding.instance.addObserver(this);
+    _entry = widget.entry;
+
+    // ✅ 延迟加载图片，让第一帧先渲染
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!_isDisposed) {
+        _loadImagesAsync();
+      }
+    });
   }
 
   @override
   void dispose() {
     _isDisposed = true;
-    // ✅ 离开页面时清理所有缓存
+    WidgetsBinding.instance.removeObserver(this);
     _cachedFullImages.clear();
     super.dispose();
   }
 
-  // ========== 数据加载方法 ==========
-
-  Future<void> _loadEntry() async {
-    if (_isDisposed) return;
-
-    setState(() {
-      _isLoading = true;
-      _decryptedPassword = null;
-      _passwordHidden = true;
-    });
-
-    final entry = await DatabaseHelper.getEntryById(widget.entryId);
-
-    if (_isDisposed) return;
-
-    setState(() {
-      _entry = entry;
-      _isLoading = false;
-    });
-
-    if (entry != null) {
-      _loadImages();
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_isDisposed) {
+      _refreshImages();
     }
   }
 
-  Future<void> _loadImages() async {
-    if (_entry == null || _isDisposed) return;
+  // ========== ✅ 图片加载 ==========
+
+  Future<void> _loadImagesAsync() async {
+    if (_isDisposed) return;
 
     setState(() => _isLoadingImages = true);
 
     try {
       final masterKey = _getMasterKey();
       if (masterKey == null) {
-        if (!_isDisposed) {
-          setState(() => _isLoadingImages = false);
-        }
+        setState(() => _isLoadingImages = false);
         return;
       }
 
-      final images = await ImageService.getEntryImages(_entry!.id);
+      // ✅ 查询图片列表（轻量操作）
+      final images = await DatabaseHelper.getImagesByEntryId(_entry.id);
       if (_isDisposed) return;
 
-      final thumbnails = <Uint8List>[];
-
-      for (final image in images) {
-        if (_isDisposed) break;
-        final thumb = await ImageService.getThumbnail(image, masterKey);
-        if (thumb != null) {
-          thumbnails.add(thumb);
-        }
+      if (images.isEmpty) {
+        setState(() {
+          _imageModels = [];
+          _imageThumbnails = [];
+          _isLoadingImages = false;
+        });
+        return;
       }
 
-      if (_isDisposed) return;
-
+      // ✅ 先显示占位，再分批加载缩略图
       setState(() {
         _imageModels = images;
-        _imageThumbnails = thumbnails;
+        _imageThumbnails = List.generate(images.length, (_) => Uint8List(0));
         _isLoadingImages = false;
       });
+
+      // ✅ 分批加载缩略图（每批 3 张）
+      await _loadThumbnailsBatch(images, masterKey);
+
     } catch (e) {
-      print('加载图片失败: $e');
       if (!_isDisposed) {
         setState(() => _isLoadingImages = false);
       }
     }
   }
 
-  Uint8List? _getMasterKey() {
-    final authState = ref.read(authProvider);
-    return authState.masterKey;
-  }
+  // ✅ 分批加载缩略图
+  Future<void> _loadThumbnailsBatch(List<ImageModel> images, Uint8List masterKey) async {
+    const batchSize = 3;
+    final total = images.length;
 
-  // ========== 密码操作 ==========
+    for (int start = 0; start < total; start += batchSize) {
+      if (_isDisposed) return;
 
-  Future<void> _decryptPassword() async {
-    if (_isDisposed) return;
+      final end = (start + batchSize).clamp(0, total);
+      final batch = images.sublist(start, end);
 
-    final masterKey = _getMasterKey();
-    if (masterKey == null) {
-      if (mounted) {
-        ToastUtils.showError(context, '未解锁，请重新登录');
-      }
-      return;
-    }
-
-    if (_entry?.encryptedPassword == null || _entry!.encryptedPassword!.isEmpty) {
-      return;
-    }
-
-    if (_decryptedPassword != null) {
-      return;
-    }
-
-    setState(() {
-      _isDecrypting = true;
-    });
-
-    try {
-      final decrypted = await AESGCMHelper.decrypt(
-        _entry!.encryptedPassword!,
-        masterKey,
+      // ✅ 并发解密当前批次
+      final results = await Future.wait(
+        batch.map((image) async {
+          try {
+            final thumb = await ImageService.getThumbnail(image, masterKey);
+            return thumb ?? Uint8List(0);
+          } catch (_) {
+            return Uint8List(0);
+          }
+        }),
       );
 
       if (_isDisposed) return;
 
+      // ✅ 更新 UI
       setState(() {
-        _decryptedPassword = decrypted;
-        _isDecrypting = false;
+        for (int i = 0; i < results.length; i++) {
+          final index = start + i;
+          if (index < _imageThumbnails.length) {
+            _imageThumbnails[index] = results[i];
+          }
+        }
       });
-    } catch (e) {
-      if (_isDisposed) return;
-      setState(() {
-        _isDecrypting = false;
-      });
-      if (mounted) {
-        ToastUtils.showError(context, '解密失败: $e');
+
+      // ✅ 每批之间让出 UI 线程
+      if (end < total) {
+        await Future.delayed(const Duration(milliseconds: 50));
       }
     }
   }
 
-  Future<void> _copyToClipboard(String text, String label) async {
-    await Helpers.copyToClipboard(text);
-    if (mounted && !_isDisposed) {
-      ToastUtils.showSuccess(context, '已复制 $label');
-    }
-  }
-
-  Future<void> _deleteEntry() async {
+  // ✅ 刷新图片
+  Future<void> _refreshImages() async {
     if (_isDisposed) return;
 
-    final confirmed = await ToastUtils.showDangerConfirmDialog(
-      context,
-      title: '删除',
-      content: '确定要删除 "${_entry?.title}" 吗？\n\n注意：关联的图片也会被删除。',
-      confirmText: '删除',
-    );
-
-    if (confirmed == true && _entry != null) {
+    try {
       final masterKey = _getMasterKey();
-      if (masterKey != null) {
-        await ImageService.deleteAllImagesForEntry(_entry!.id, masterKey);
+      if (masterKey == null) return;
+
+      final images = await DatabaseHelper.getImagesByEntryId(_entry.id);
+      if (_isDisposed) return;
+
+      final currentIds = images.map((e) => e.id).toSet();
+      _cachedFullImages.removeWhere((key, value) => !currentIds.contains(key));
+
+      setState(() {
+        _imageModels = images;
+        _imageThumbnails = List.generate(images.length, (_) => Uint8List(0));
+      });
+
+      if (images.isNotEmpty) {
+        await _loadThumbnailsBatch(images, masterKey);
       }
-      await DatabaseHelper.deleteEntry(_entry!.id);
-      if (mounted) {
-        Navigator.pop(context, true);
-      }
-    }
+    } catch (_) {}
   }
 
-  // ✅ 查看大图 - 使用 imageModel.id 作为缓存键
+  // ========== ✅ 查看大图 ==========
+
   void _viewImage(int index) async {
     if (_isDisposed) return;
-    if (index >= _imageThumbnails.length) return;
-    if (_entry == null) return;
+    if (index >= _imageModels.length) return;
 
     final masterKey = _getMasterKey();
     if (masterKey == null) {
@@ -228,107 +200,123 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     final imageModel = _imageModels[index];
     final imageId = imageModel.id;
 
-    // ✅ 使用 imageModel.id 作为缓存键
-    Uint8List? fullImage = _cachedFullImages[imageId];
-    if (fullImage != null) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ImageViewerPage(
-            imageModels: _imageModels,
-            thumbnails: _imageThumbnails,
-            initialIndex: index,
-            entryId: _entry!.id,
-            preloadedImage: fullImage,
-          ),
-        ),
-      ).then((_) {
-        if (!_isDisposed) {
-          _refreshImages();
-        }
-      });
+    // ✅ 检查缓存
+    if (_cachedFullImages.containsKey(imageId)) {
+      _navigateToViewer(index, _cachedFullImages[imageId]!);
       return;
     }
 
-    // ✅ 没有缓存：先显示转圈，在 isolate 中加载
+    // ✅ 加载原图
     setState(() => _isLoadingFullImage = true);
     await Future.delayed(Duration.zero);
 
-    fullImage = await ImageService.loadImageInIsolate(imageModel, masterKey);
+    final fullImage = await ImageService.loadImageInIsolate(imageModel, masterKey);
 
     if (_isDisposed) return;
-
     setState(() => _isLoadingFullImage = false);
 
     if (fullImage == null) {
-      if (mounted && !_isDisposed) {
-        ToastUtils.showError(context, '加载图片失败，请重试');
-      }
+      ToastUtils.showError(context, '加载图片失败');
       return;
     }
 
-    // ✅ 存入缓存（使用 imageModel.id 作为键）
     _cachedFullImages[imageId] = fullImage;
-
-    // ✅ 直接进入查看器（转圈已结束）
-    if (mounted && !_isDisposed) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ImageViewerPage(
-            imageModels: _imageModels,
-            thumbnails: _imageThumbnails,
-            initialIndex: index,
-            entryId: _entry!.id,
-            preloadedImage: fullImage,
-          ),
-        ),
-      ).then((_) {
-        if (!_isDisposed) {
-          _refreshImages();
-        }
-      });
-    }
+    _navigateToViewer(index, fullImage);
   }
 
-  // ✅ 刷新缩略图，同时清理已删除图片的缓存
-  Future<void> _refreshImages() async {
-    if (_entry == null || _isDisposed) return;
+  void _navigateToViewer(int index, Uint8List fullImage) {
+    if (!mounted || _isDisposed) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ImageViewerPage(
+          imageModels: _imageModels,
+          thumbnails: _imageThumbnails,
+          initialIndex: index,
+          entryId: _entry.id,
+          preloadedImage: fullImage,
+        ),
+      ),
+    ).then((_) {
+      if (!_isDisposed) {
+        _refreshImages();
+      }
+    });
+  }
+
+  // ========== ✅ 密码操作 ==========
+
+  Uint8List? _getMasterKey() {
+    return ref.read(authProvider).masterKey;
+  }
+
+  Future<void> _decryptPassword() async {
+    if (_isDisposed) return;
+
+    final masterKey = _getMasterKey();
+    if (masterKey == null) {
+      ToastUtils.showError(context, '未解锁，请重新登录');
+      return;
+    }
+
+    if (_entry.encryptedPassword == null || _entry.encryptedPassword!.isEmpty) {
+      return;
+    }
+
+    if (_decryptedPassword != null) return;
+
+    setState(() => _isDecrypting = true);
 
     try {
-      final masterKey = _getMasterKey();
-      if (masterKey == null) return;
-
-      final images = await ImageService.getEntryImages(_entry!.id);
-      if (_isDisposed) return;
-
-      // ✅ 获取当前图片 ID 列表
-      final currentImageIds = images.map((e) => e.id).toSet();
-
-      // ✅ 清理缓存中已被删除的图片
-      _cachedFullImages.removeWhere((key, value) => !currentImageIds.contains(key));
-
-      final thumbnails = <Uint8List>[];
-      for (final image in images) {
-        if (_isDisposed) break;
-        final thumb = await ImageService.getThumbnail(image, masterKey);
-        if (thumb != null) {
-          thumbnails.add(thumb);
-        }
+      final decrypted = await AESGCMHelper.decrypt(
+        _entry.encryptedPassword!,
+        masterKey,
+      );
+      if (!_isDisposed) {
+        setState(() {
+          _decryptedPassword = decrypted;
+          _isDecrypting = false;
+        });
       }
-
-      if (_isDisposed) return;
-
-      setState(() {
-        _imageModels = images;
-        _imageThumbnails = thumbnails;
-      });
     } catch (e) {
-      // 静默失败
+      if (!_isDisposed) {
+        setState(() => _isDecrypting = false);
+        ToastUtils.showError(context, '解密失败: $e');
+      }
     }
   }
 
-  // ========== 界面构建 ==========
+  Future<void> _copyToClipboard(String text, String label) async {
+    await Helpers.copyToClipboard(text);
+    if (mounted) {
+      ToastUtils.showSuccess(context, '已复制 $label');
+    }
+  }
+
+  Future<void> _deleteEntry() async {
+    if (_isDisposed) return;
+
+    final confirmed = await ToastUtils.showDangerConfirmDialog(
+      context,
+      title: '删除',
+      content: '确定要删除 "${_entry.title}" 吗？\n\n关联的图片也会被删除。',
+      confirmText: '删除',
+    );
+
+    if (confirmed == true) {
+      final masterKey = _getMasterKey();
+      if (masterKey != null) {
+        await ImageService.deleteAllImagesForEntry(_entry.id, masterKey);
+      }
+      await DatabaseHelper.deleteEntry(_entry.id);
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    }
+  }
+
+  // ========== ✅ UI 构建 ==========
 
   @override
   Widget build(BuildContext context) {
@@ -341,14 +329,15 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () {
-              if (_entry != null && !_isDisposed) {
+              if (!_isDisposed) {
                 Navigator.pushNamed(
                   context,
                   AppRoutes.addEdit,
                   arguments: _entry,
                 ).then((_) {
                   if (!_isDisposed) {
-                    _loadEntry();
+                    // ✅ 编辑返回后刷新
+                    _refreshImages();
                   }
                 });
               }
@@ -360,14 +349,10 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _entry == null
-          ? _buildErrorState()
-          : Stack(
+      body: Stack(
         children: [
           _buildContent(),
-          // ✅ 加载转圈（覆盖整个页面）
+          // ✅ 加载遮罩
           if (_isLoadingFullImage)
             Container(
               color: Colors.black.withValues(alpha: 0.5),
@@ -387,31 +372,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
     );
   }
 
-  Widget _buildErrorState() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: isDark ? Colors.grey.shade500 : Colors.grey,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '密码条目不存在',
-            style: TextStyle(
-              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildContent() {
-    final entry = _entry!;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SingleChildScrollView(
@@ -422,32 +383,32 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
           _buildSection(
             title: '标题',
             icon: Icons.title,
-            content: entry.title,
+            content: _entry.title,
           ),
           const SizedBox(height: 16),
 
-          if (entry.username != null && entry.username!.isNotEmpty)
+          if (_entry.username != null && _entry.username!.isNotEmpty)
             _buildSection(
               title: '用户名',
               icon: Icons.person,
-              content: entry.username!,
-              onCopy: () => _copyToClipboard(entry.username!, '用户名'),
+              content: _entry.username!,
+              onCopy: () => _copyToClipboard(_entry.username!, '用户名'),
             ),
 
-          if (entry.username != null && entry.username!.isNotEmpty)
+          if (_entry.username != null && _entry.username!.isNotEmpty)
             const SizedBox(height: 16),
 
-          if (entry.encryptedPassword != null && entry.encryptedPassword!.isNotEmpty)
+          if (_entry.encryptedPassword != null && _entry.encryptedPassword!.isNotEmpty)
             _buildPasswordSection(),
 
-          if (entry.encryptedPassword != null && entry.encryptedPassword!.isNotEmpty)
+          if (_entry.encryptedPassword != null && _entry.encryptedPassword!.isNotEmpty)
             const SizedBox(height: 16),
 
-          if (entry.notes != null && entry.notes!.isNotEmpty)
+          if (_entry.notes != null && _entry.notes!.isNotEmpty)
             _buildSection(
               title: '备注',
               icon: Icons.note,
-              content: entry.notes!,
+              content: _entry.notes!,
             ),
 
           const SizedBox(height: 16),
@@ -471,7 +432,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '最后修改：${Helpers.formatDate(entry.updatedAt)}',
+                  '最后修改：${Helpers.formatDate(_entry.updatedAt)}',
                   style: TextStyle(
                     fontSize: 12,
                     color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -507,11 +468,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
         children: [
           Row(
             children: [
-              Icon(
-                icon,
-                size: 20,
-                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-              ),
+              Icon(icon, size: 20, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
               const SizedBox(width: 8),
               Text(
                 title,
@@ -549,13 +506,10 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
   }
 
   Widget _buildPasswordSection() {
-    final entry = _entry!;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     String displayPassword;
-    if (_decryptedPassword == null) {
-      displayPassword = '********';
-    } else if (_passwordHidden) {
+    if (_decryptedPassword == null || _passwordHidden) {
       displayPassword = '********';
     } else {
       displayPassword = _decryptedPassword!;
@@ -575,11 +529,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
         children: [
           Row(
             children: [
-              Icon(
-                Icons.lock,
-                size: 20,
-                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-              ),
+              Icon(Icons.lock, size: 20, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
               const SizedBox(width: 8),
               Text(
                 '密码',
@@ -599,9 +549,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
                   if (_decryptedPassword == null && !_isDecrypting) {
                     await _decryptPassword();
                   }
-                  setState(() {
-                    _passwordHidden = !_passwordHidden;
-                  });
+                  setState(() => _passwordHidden = !_passwordHidden);
                 },
                 tooltip: _passwordHidden ? '显示密码' : '隐藏密码',
                 padding: EdgeInsets.zero,
@@ -692,11 +640,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
       children: [
         Row(
           children: [
-            Icon(
-              Icons.image,
-              size: 20,
-              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-            ),
+            Icon(Icons.image, size: 20, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
             const SizedBox(width: 8),
             Text(
               '图片（${_imageThumbnails.length}张）',
@@ -720,46 +664,38 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> {
           itemCount: _imageThumbnails.length > 8 ? 9 : _imageThumbnails.length,
           itemBuilder: (context, index) {
             if (_imageThumbnails.length > 8 && index == 8) {
-              final remaining = _imageThumbnails.length - 8;
-              return _buildMoreImagesButton(remaining);
+              return _buildMoreImagesButton(_imageThumbnails.length - 8);
             }
-            return _buildImageThumbnail(index);
+
+            final imageBytes = _imageThumbnails[index];
+            return GestureDetector(
+              onTap: () => _viewImage(index),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: imageBytes.isNotEmpty
+                      ? Image.memory(imageBytes, fit: BoxFit.cover)
+                      : Container(
+                    color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+                    child: Icon(
+                      Icons.image,
+                      color: isDark ? Colors.grey.shade500 : Colors.grey,
+                      size: 32,
+                    ),
+                  ),
+                ),
+              ),
+            );
           },
         ),
         const SizedBox(height: 8),
       ],
-    );
-  }
-
-  Widget _buildImageThumbnail(int index) {
-    final imageBytes = _imageThumbnails[index];
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return GestureDetector(
-      onTap: () => _viewImage(index),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
-          ),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.memory(
-            imageBytes,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
-              child: Icon(
-                Icons.broken_image,
-                color: isDark ? Colors.grey.shade500 : Colors.grey,
-                size: 32,
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 

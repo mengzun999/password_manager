@@ -1,3 +1,4 @@
+
 import 'dart:ui';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../constants/app_constants.dart';
@@ -29,6 +30,60 @@ class SharedPrefs {
     await _prefs!.setBool(AppConstants.keyBiometricEnabled, enabled);
   }
 
+  static Future<bool> isBiometricEnabled() async {
+    await _ensureInitialized();
+    return _prefs!.getBool(AppConstants.keyBiometricEnabled) ?? false;
+  }
+
+  // ========== ✅ 生物识别缓存（新增） ==========
+  static const String _keyBiometricAvailable = 'biometric_available';
+  static const String _keyBiometricTypes = 'biometric_types';
+  static const String _keyBiometricCachedAt = 'biometric_cached_at';
+
+  /// 缓存生物识别可用状态
+  static Future<void> cacheBiometricAvailability(bool available) async {
+    await _ensureInitialized();
+    await _prefs!.setBool(_keyBiometricAvailable, available);
+    await _prefs!.setInt(_keyBiometricCachedAt, DateTime.now().millisecondsSinceEpoch);
+  }
+
+  /// 获取缓存的生物识别可用状态
+  static Future<bool> getCachedBiometricAvailability() async {
+    await _ensureInitialized();
+    return _prefs!.getBool(_keyBiometricAvailable) ?? false;
+  }
+
+  /// 缓存生物识别类型列表
+  static Future<void> cacheBiometricTypes(List<String> types) async {
+    await _ensureInitialized();
+    await _prefs!.setStringList(_keyBiometricTypes, types);
+  }
+
+  /// 获取缓存的生物识别类型
+  static Future<List<String>> getCachedBiometricTypes() async {
+    await _ensureInitialized();
+    return _prefs!.getStringList(_keyBiometricTypes) ?? [];
+  }
+
+  /// 检查是否有缓存的生物识别数据
+  static Future<bool> hasCachedBiometricData() async {
+    await _ensureInitialized();
+    return _prefs!.containsKey(_keyBiometricAvailable);
+  }
+
+  /// 获取缓存的生物识别状态（同步，用于 UI 快速读取）
+  static bool getCachedBiometricAvailableSync() {
+    return _prefs?.getBool(_keyBiometricAvailable) ?? false;
+  }
+
+  /// 清除生物识别缓存（当设备设置变化时调用）
+  static Future<void> clearBiometricCache() async {
+    await _ensureInitialized();
+    await _prefs!.remove(_keyBiometricAvailable);
+    await _prefs!.remove(_keyBiometricTypes);
+    await _prefs!.remove(_keyBiometricCachedAt);
+  }
+
   // ========== 暗黑模式跟随系统 ==========
   static Future<void> setDarkModeFollowSystem(bool follow) async {
     await _ensureInitialized();
@@ -38,11 +93,6 @@ class SharedPrefs {
   static Future<bool> isDarkModeFollowSystem() async {
     await _ensureInitialized();
     return _prefs!.getBool(AppConstants.keyDarkModeFollowSystem) ?? false;
-  }
-
-  static Future<bool> isBiometricEnabled() async {
-    await _ensureInitialized();
-    return _prefs!.getBool(AppConstants.keyBiometricEnabled) ?? false;
   }
 
   // ========== 暗黑模式 ==========
@@ -87,7 +137,7 @@ class SharedPrefs {
     return null;
   }
 
-// ========== ✅ 背景图相关 ==========
+  // ========== ✅ 背景图相关 ==========
 
   /// 保存背景图开关状态
   static Future<void> setBackgroundEnabled(bool enabled) async {

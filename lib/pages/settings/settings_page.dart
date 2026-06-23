@@ -1,3 +1,5 @@
+// pages/settings/settings_page.dart
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,7 +31,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:password_manager/utils/helpers.dart';
 import 'package:password_manager/core/models/password_entry.dart';
-
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -174,7 +175,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return Uint8List.fromList(hash.bytes);
   }
 
-// ========== 手势图案 ==========
+  // ========== 手势图案 ==========
   Future<void> _changeGesture() async {
     final hasGesture = await SharedPrefs.hasGesture();
     bool verified = false;
@@ -185,7 +186,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final password = await _showPasswordDialog('验证身份', '请输入主密码');
       if (password != null && password.isNotEmpty) {
         verified = await ref.read(authProvider.notifier).verifyMasterPassword(password);
-        // ✅ 添加错误提示
         if (!verified && mounted) {
           ToastUtils.showError(context, '主密码错误，请重试');
         }
@@ -225,7 +225,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   completer.complete(true);
                 }
               } else {
-                // ✅ 清除图案并提示错误
                 patternKey.currentState?.clearPattern();
                 ToastUtils.showError(context, '手势错误，请重试');
               }
@@ -535,52 +534,38 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+  // ✅ 生物识别设置项 - 直接从 SettingsState 读取，不进行任何耗时操作
   Widget _buildBiometricSection(SettingsState settings) {
     return SizedBox(
       height: 72,
-      child: FutureBuilder<bool>(
-        future: BiometricService.isAvailable(),
-        builder: (context, snapshot) {
-          final isAvailable = snapshot.data ?? false;
-
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)));
+      child: ListTile(
+        leading: const Icon(Icons.fingerprint),
+        title: const Text('生物识别解锁'),
+        subtitle: Text(settings.isBiometricEnabled ? '已开启' : '未开启'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (settings.isBiometricAvailable && settings.isBiometricEnabled)
+              const Icon(Icons.check_circle, color: Colors.green, size: 20),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+        onTap: () {
+          // ✅ 如果设备不支持生物识别，给出提示
+          if (!settings.isBiometricAvailable) {
+            ToastUtils.showInfo(context, '当前设备不支持生物识别');
+            return;
           }
-
-          if (!isAvailable) {
-            return Container(
-              color: Colors.grey.shade50,
-              child: const ListTile(
-                leading: Icon(Icons.fingerprint, color: Colors.grey),
-                title: Text('生物识别解锁'),
-                subtitle: Text('当前设备不支持生物识别'),
-                trailing: Icon(Icons.info_outline, color: Colors.grey),
-              ),
-            );
-          }
-
-          return ListTile(
-            leading: const Icon(Icons.fingerprint),
-            title: const Text('生物识别解锁'),
-            subtitle: Text(settings.isBiometricEnabled ? '已开启' : '未开启'),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (settings.isBiometricEnabled) const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                const Icon(Icons.chevron_right),
-              ],
-            ),
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const BiometricSetupPage()))
-                  .then((_) => _loadSettings());
-            },
-          );
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const BiometricSetupPage()),
+          ).then((_) => _loadSettings());
         },
       ),
     );
   }
 
-// ========== 图片压缩档位选择 ==========
+  // ========== 图片压缩档位选择 ==========
   Future<void> _showCompressLevelDialog() async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -631,7 +616,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         required String subtitle,
         required bool isDark,
       }) {
-    // ✅ 直接读取最新状态
     final currentLevel = ref.watch(settingsProvider).imageCompressLevel;
     final isSelected = level == currentLevel;
 
@@ -659,7 +643,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           children: [
             Radio<int>(
               value: level,
-              groupValue: currentLevel,  // ✅ 直接从 ref.watch 获取
+              groupValue: currentLevel,
               onChanged: (value) {
                 ref.read(settingsProvider.notifier).setImageCompressLevel(level);
               },
@@ -699,123 +683,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-// // ========== 压力测试 ==========
-//   Future<void> _runStressTest() async {
-//     final confirmed = await ToastUtils.showConfirmDialog(
-//       context,
-//       title: '压力测试',
-//       content: '将生成1000条测试数据，确定继续吗？\n\n注意：会覆盖现有数据！',
-//       confirmText: '开始测试',
-//       isDestructive: false,
-//     );
-//
-//     if (confirmed != true) return;
-//
-//     setState(() => _isLoading = true);
-//
-//     try {
-//       final startTime = DateTime.now();
-//
-//       // ✅ 获取主密钥
-//       final authState = ref.read(authProvider);
-//       final masterKey = authState.masterKey;
-//       if (masterKey == null) {
-//         ToastUtils.showError(context, '请先解锁应用');
-//         setState(() => _isLoading = false);
-//         return;
-//       }
-//
-//       // 生成1000条测试数据
-//       final entries = <PasswordEntry>[];
-//       final now = DateTime.now().millisecondsSinceEpoch;
-//
-//       for (int i = 0; i < 1000; i++) {
-//         // ✅ 生成真实加密密码
-//         final plainPassword = 'Test@123_${i + 1}';
-//         final encryptedPassword = await AESGCMHelper.encrypt(plainPassword, masterKey);
-//
-//         entries.add(
-//           PasswordEntry(
-//             id: Helpers.generateUuid(),
-//             title: '测试账号 ${i + 1}',
-//             username: 'user_${i + 1}@test.com',
-//             encryptedPassword: encryptedPassword,  // ✅ 真实加密密码
-//             notes: '这是第 ${i + 1} 条测试数据，密码: $plainPassword',
-//             appPackageName: null,
-//             createdAt: now + i,
-//             updatedAt: now + i,
-//           ),
-//         );
-//       }
-//
-//       // 批量插入
-//       for (final entry in entries) {
-//         await DatabaseHelper.insertEntry(entry);
-//       }
-//
-//       final endTime = DateTime.now();
-//       final duration = endTime.difference(startTime);
-//
-//       ref.read(passwordProvider.notifier).loadEntries();
-//
-//       if (mounted) {
-//         ToastUtils.showSuccess(
-//           context,
-//           '✅ 压力测试完成\n'
-//               '生成 1000 条数据\n'
-//               '耗时: ${duration.inMilliseconds}ms\n'
-//               '平均: ${(duration.inMilliseconds / 1000).toStringAsFixed(1)}ms/条\n'
-//               '密码格式: Test@123_1 ~ Test@123_1000',
-//         );
-//       }
-//     } catch (e) {
-//       if (mounted) {
-//         ToastUtils.showError(context, '压力测试失败: $e');
-//       }
-//     } finally {
-//       if (mounted) setState(() => _isLoading = false);
-//     }
-//   }
-//   // ========== 清除测试数据 ==========
-//   Future<void> _clearTestData() async {
-//     final confirmed = await ToastUtils.showDangerConfirmDialog(
-//       context,
-//       title: '清除测试数据',
-//       content: '将删除所有标题包含"测试账号"的数据，确定继续吗？',
-//       confirmText: '清除',
-//     );
-//
-//     if (confirmed != true) return;
-//
-//     setState(() => _isLoading = true);
-//
-//     try {
-//       final entries = await DatabaseHelper.getAllEntries();
-//       final testEntries = entries.where((e) => e.title.contains('测试账号')).toList();
-//
-//       for (final entry in testEntries) {
-//         await DatabaseHelper.deleteEntry(entry.id);
-//       }
-//
-//       ref.read(passwordProvider.notifier).loadEntries();
-//
-//       if (mounted) {
-//         ToastUtils.showSuccess(context, '已清除 ${testEntries.length} 条测试数据');
-//       }
-//     } catch (e) {
-//       if (mounted) {
-//         ToastUtils.showError(context, '清除失败: $e');
-//       }
-//     } finally {
-//       if (mounted) setState(() => _isLoading = false);
-//     }
-//   }
-
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
 
-    if (_isLoading) {
+    if (_isLoading || settings.isLoading) {
       return Scaffold(
         appBar: AppBar(title: const Text('设置')),
         body: const Center(child: CircularProgressIndicator()),
@@ -837,21 +709,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         onTap: _clearAllData,
         isDestructive: true,
       ),
-      // //====================================================
-      // _buildMenuItem(
-      //   icon: Icons.speed,
-      //   title: '压力测试',
-      //   subtitle: '生成1000条测试数据',
-      //   onTap: _runStressTest,
-      // ),
-      // _buildMenuItem(
-      //   icon: Icons.delete_outline,
-      //   title: '清除测试数据',
-      //   subtitle: '删除所有标题包含"测试账号"的数据',
-      //   onTap: _clearTestData,
-      //   isDestructive: true,
-      // ),
-      // //====================================================
       const Divider(),
       _buildSectionHeader('外观'),
       _buildSwitchItem(
@@ -896,7 +753,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       _buildMenuItem(
         icon: Icons.info_outline,
         title: '关于',
-        subtitle: '版本 1.0.0',  // 需要定义 _appVersion
+        subtitle: '版本 1.0.0',
         onTap: () {
           Navigator.push(
             context,

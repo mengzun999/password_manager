@@ -50,53 +50,59 @@ class _MyAppState extends ConsumerState<MyApp> {
   }
 
   Route<dynamic> _generateRoute(RouteSettings settings) {
+    Widget page;
+
     switch (settings.name) {
       case AppRoutes.setup:
-        return MaterialPageRoute(builder: (_) => const SetupMasterPasswordPage());
-
+        page = const SetupMasterPasswordPage();
+        break;
       case AppRoutes.unlock:
-        return MaterialPageRoute(builder: (_) => const UnlockPage());
-
+        page = const UnlockPage();
+        break;
       case AppRoutes.home:
-        return MaterialPageRoute(builder: (_) => const PasswordListPage());
-
+        page = const PasswordListPage();
+        break;
       case AppRoutes.setupMnemonic:
-        return MaterialPageRoute(builder: (_) => const SetupMnemonicPage());
-
+        page = const SetupMnemonicPage();
+        break;
       case AppRoutes.setupGesture:
-        return MaterialPageRoute(builder: (_) => const SetupGesturePage());
-
+        page = const SetupGesturePage();
+        break;
       case AppRoutes.setupBiometric:
-        return MaterialPageRoute(builder: (_) => const SetupBiometricPage());
-
+        page = const SetupBiometricPage();
+        break;
       case AppRoutes.addEdit:
         final args = settings.arguments;
         if (args == null) {
-          return MaterialPageRoute(builder: (_) => const AddEditPage());
+          page = const AddEditPage();
+        } else if (args is PasswordEntry) {
+          page = AddEditPage(entry: args);
+        } else if (args is String) {
+          page = AddEditPage(presetTitle: args);
+        } else {
+          page = const AddEditPage();
         }
-        if (args is PasswordEntry) {
-          return MaterialPageRoute(builder: (_) => AddEditPage(entry: args));
-        }
-        if (args is String) {
-          return MaterialPageRoute(builder: (_) => AddEditPage(presetTitle: args));
-        }
-        return MaterialPageRoute(builder: (_) => const AddEditPage());
-
+        break;
       case AppRoutes.detail:
-        final entryId = settings.arguments as String;
-        return MaterialPageRoute(
-          builder: (_) => PasswordDetailPage(entryId: entryId),
-        );
-
+        final entry = settings.arguments as PasswordEntry;
+        page = PasswordDetailPage(entry: entry);
+        break;
       case AppRoutes.settings:
-        return MaterialPageRoute(builder: (_) => const SettingsPage());
-
+        page = const SettingsPage();
+        break;
       default:
-        return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text('页面不存在')),
-          ),
+        page = const Scaffold(
+          body: Center(child: Text('页面不存在')),
         );
     }
+
+    // ✅ 唯一改动：统一包裹 SafeArea
+    return MaterialPageRoute(
+      builder: (_) => SafeArea(
+        top: false,      // ✅ 不保护顶部（保留状态栏透明）
+        bottom: true,
+        child: page,
+      ),
+    );
   }
 }
