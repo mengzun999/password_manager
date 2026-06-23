@@ -83,7 +83,9 @@ class _SetupMnemonicContentState extends ConsumerState<_SetupMnemonicContent> {
         Navigator.pushReplacementNamed(context, AppRoutes.setupGesture);
       }
     } catch (e) {
-      ToastUtils.showError(context, '保存失败: $e');
+      if (mounted) {
+        ToastUtils.showError(context, '保存失败: $e');
+      }
       setState(() => _isSaving = false);
     }
   }

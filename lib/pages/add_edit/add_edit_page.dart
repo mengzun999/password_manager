@@ -447,7 +447,7 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
 
         // 5. ✅ 保存图片（使用 isolate 版本，不会卡 UI）
         if (_pendingImages.isNotEmpty) {
-          final savedImages = await ImageService.saveImages(
+          await ImageService.saveImages(
             imageFiles: _pendingImages,
             entryId: widget.entry!.id,
             masterKey: masterKey,
@@ -482,7 +482,7 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
 
       // 7. ✅ 保存图片（使用 isolate 版本）
       if (_pendingImages.isNotEmpty) {
-        final savedImages = await ImageService.saveImages(
+        await ImageService.saveImages(
           imageFiles: _pendingImages,
           entryId: entry.id,
           masterKey: masterKey,
@@ -623,7 +623,7 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
 
                     const SizedBox(height: 8),
                     Text(
-                      '${allImageCount}/20 张',
+                      '$allImageCount/20 张',
                       style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade500),
                     ),
                     const SizedBox(height: 8),
@@ -720,7 +720,7 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
                     child: Image.memory(
                       _savedImageThumbnails[index],
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
+                      errorBuilder: (context, error, stackTrace) => Container(
                         color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
                         child: Icon(Icons.broken_image, color: isDark ? Colors.grey.shade500 : Colors.grey),
                       ),

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:password_manager/constants/app_constants.dart';
@@ -103,7 +102,9 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
     // 1. 验证主密码
     final verified = await _verifyMasterPassword();
     if (!verified) {
-      ToastUtils.showError(context, '验证失败');
+      if (mounted) {
+        ToastUtils.showError(context, '验证失败');
+      }
       return;
     }
 
@@ -123,7 +124,9 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
       });
 
       if (!isAuthenticated) {
-        ToastUtils.showError(context, '验证失败，请重试');
+        if (mounted) {
+          ToastUtils.showError(context, '验证失败，请重试');
+        }
         return;
       }
 
@@ -132,7 +135,9 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
       final masterKey = authState.masterKey;
 
       if (masterKey == null) {
-        ToastUtils.showError(context, '未获取到主密钥');
+        if (mounted) {
+          ToastUtils.showError(context, '未获取到主密钥');
+        }
         return;
       }
 
@@ -146,7 +151,10 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
       );
 
       // 6. 使用 biometricKey 加密 masterKey（覆盖旧的）
-      final encryptedMasterKey = await AESGCMHelper.encryptBytes(masterKey, biometricKey);
+      final encryptedMasterKey = await AESGCMHelper.encryptBytes(
+        masterKey,
+        biometricKey,
+      );
 
       await SecureStorage.write(
         AppConstants.keyEncryptedMasterKeyForBiometric,
@@ -170,7 +178,9 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
         _isAuthenticating = false;
         _error = '启用失败: $e';
       });
-      ToastUtils.showError(context, '启用失败');
+      if (mounted) {
+        ToastUtils.showError(context, '启用失败');
+      }
     }
   }
 
@@ -179,7 +189,9 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
     // 1. 验证主密码
     final verified = await _verifyMasterPassword();
     if (!verified) {
-      ToastUtils.showError(context, '验证失败，请输入正确的主密码');  // ✅ 改为错误提示
+      if (mounted) {
+        ToastUtils.showError(context, '验证失败，请输入正确的主密码');
+      }
       return;
     }
 
@@ -188,7 +200,9 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
     try {
       // 2. 删除存储的生物识别数据
       await SecureStorage.delete(AppConstants.keyBiometricKeyId);
-      await SecureStorage.delete(AppConstants.keyEncryptedMasterKeyForBiometric);
+      await SecureStorage.delete(
+        AppConstants.keyEncryptedMasterKeyForBiometric,
+      );
 
       // 3. 关闭开关
       await SharedPrefs.setBiometricEnabled(false);
@@ -203,7 +217,9 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
 
       ToastUtils.showSuccess(context, '指纹解锁已关闭');
     } catch (e) {
-      ToastUtils.showError(context, '关闭失败: $e');
+      if (mounted) {
+        ToastUtils.showError(context, '关闭失败: $e');
+      }
       setState(() => _isLoading = false);
     }
   }
@@ -221,9 +237,7 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      appBar: AppBar(
-        title: const Text('指纹设置'),
-      ),
+      appBar: AppBar(title: const Text('指纹设置')),
       body: SafeArea(
         bottom: true,
         child: SingleChildScrollView(
@@ -253,9 +267,7 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
                     children: [
                       Icon(Icons.fingerprint, color: Colors.grey.shade600),
                       const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text('当前设备不支持指纹识别'),
-                      ),
+                      const Expanded(child: Text('当前设备不支持指纹识别')),
                     ],
                   ),
                 ),
@@ -332,9 +344,7 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
                               Text(
                                 _isAuthenticating
                                     ? '验证中...'
-                                    : (_isEnabled
-                                    ? '指纹解锁已启用'
-                                    : '指纹解锁已关闭'),
+                                    : (_isEnabled ? '指纹解锁已启用' : '指纹解锁已关闭'),
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
@@ -348,8 +358,8 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
                                 _isAuthenticating
                                     ? '请将手指放在传感器上'
                                     : (_isEnabled
-                                    ? '每次解锁应用时会自动弹出指纹验证'
-                                    : '开启后可以用指纹快速解锁应用，无需输入主密码'),
+                                          ? '每次解锁应用时会自动弹出指纹验证'
+                                          : '开启后可以用指纹快速解锁应用，无需输入主密码'),
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: _isEnabled
@@ -370,11 +380,8 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
                   padding: const EdgeInsets.all(16),
                   child: Text(
                     '💡 开启后解锁页面会自动弹出指纹验证\n'
-                        '如需更换指纹，先关闭再重新开启即可',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade500,
-                    ),
+                    '如需更换指纹，先关闭再重新开启即可',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                     textAlign: TextAlign.center,
                   ),
                 ),

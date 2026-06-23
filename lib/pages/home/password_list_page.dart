@@ -235,7 +235,7 @@ class _PasswordListPageState extends ConsumerState<PasswordListPage> {
                   _cachedBackgroundImage!,
                   fit: BoxFit.cover,
                   gaplessPlayback: true,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
                 ),
               ),
             ),

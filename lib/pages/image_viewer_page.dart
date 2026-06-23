@@ -1,8 +1,4 @@
-// image_viewer_page.dart
 
-// pages/image_viewer_page.dart
-
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -134,7 +130,9 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
 
     final masterKey = ref.read(masterKeyProvider);
     if (masterKey == null) {
-      ToastUtils.showError(context, '请先解锁');
+      if (mounted) {
+        ToastUtils.showError(context, '请先解锁');
+      }
       return;
     }
 
@@ -147,11 +145,15 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
         _imageCache.remove(_currentIndex);
         Navigator.pop(context, true);
       } else if (!_isDisposed) {
-        ToastUtils.showError(context, '删除失败');
+        if (mounted) {
+          ToastUtils.showError(context, '删除失败');
+        }
       }
     } catch (e) {
       if (!_isDisposed) {
-        ToastUtils.showError(context, '删除失败: $e');
+        if (mounted) {
+          ToastUtils.showError(context, '删除失败: $e');
+        }
       }
     }
   }

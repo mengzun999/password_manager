@@ -1,6 +1,4 @@
-// password_detail_page.dart
 
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -216,7 +214,9 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> with Wi
     setState(() => _isLoadingFullImage = false);
 
     if (fullImage == null) {
-      ToastUtils.showError(context, '加载图片失败');
+      if (mounted) {
+        ToastUtils.showError(context, '加载图片失败');
+      }
       return;
     }
 
@@ -320,7 +320,6 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> with Wi
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,

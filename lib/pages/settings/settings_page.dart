@@ -1,16 +1,10 @@
-// pages/settings/settings_page.dart
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:password_manager/app.dart';
 import 'package:password_manager/constants/app_constants.dart';
 import 'package:password_manager/core/crypto/aes_gcm.dart';
-import 'package:password_manager/core/crypto/pbkdf2.dart';
-import 'package:password_manager/core/crypto/random.dart';
-import 'package:password_manager/core/models/image_model.dart';
 import 'package:password_manager/core/services/backup_service.dart';
-import 'package:password_manager/core/services/biometric_service.dart';
 import 'package:password_manager/core/storage/shared_prefs.dart';
 import 'package:password_manager/core/storage/secure_storage.dart';
 import 'package:password_manager/core/storage/database.dart';
@@ -29,8 +23,6 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:password_manager/utils/helpers.dart';
-import 'package:password_manager/core/models/password_entry.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -52,104 +44,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     if (mounted) setState(() => _isLoading = false);
   }
 
-  // ========== 主密码修改 ==========
-  Future<void> _changeMasterPassword() async {
-    final currentPassword = await _showPasswordDialog('验证身份', '请输入当前主密码');
-    if (currentPassword == null || currentPassword.isEmpty) return;
-
-    final authNotifier = ref.read(authProvider.notifier);
-    final isValid = await authNotifier.verifyMasterPassword(currentPassword);
-    if (!isValid) {
-      ToastUtils.showError(context, '当前密码错误');
-      return;
-    }
-
-    final newPassword = await _showPasswordDialog('设置新密码', '请输入新主密码（至少6位）');
-    if (newPassword == null || newPassword.length < 6) {
-      ToastUtils.showError(context, '密码至少6位');
-      return;
-    }
-
-    final confirmPassword = await _showPasswordDialog('确认新密码', '请再次输入新主密码');
-    if (newPassword != confirmPassword) {
-      ToastUtils.showError(context, '两次输入的密码不一致');
-      return;
-    }
-
-    final oldSaltBase64 = await SecureStorage.read(AppConstants.keySalt);
-    final oldMasterKey = await authNotifier.verifyAndGetKey(currentPassword);
-    if (oldSaltBase64 == null || oldMasterKey == null) {
-      ToastUtils.showError(context, '获取密钥失败');
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final entries = await DatabaseHelper.getAllEntries();
-      final allImages = <ImageModel>[];
-      for (final entry in entries) {
-        allImages.addAll(await DatabaseHelper.getImagesByEntryId(entry.id));
-      }
-
-      final newSalt = SecureRandom.generateBytes(AppConstants.saltLength);
-      final newMasterKey = PBKDF2Helper.deriveKey(newPassword, newSalt);
-      final newPasswordHash = PBKDF2Helper.hashPassword(newPassword, newSalt);
-
-      for (final entry in entries) {
-        String? newEncryptedPassword;
-        if (entry.encryptedPassword != null && entry.encryptedPassword!.isNotEmpty) {
-          final decrypted = await AESGCMHelper.decrypt(entry.encryptedPassword!, oldMasterKey);
-          newEncryptedPassword = await AESGCMHelper.encrypt(decrypted, newMasterKey);
-        }
-        await DatabaseHelper.updateEntry(
-          entry.copyWith(
-            encryptedPassword: newEncryptedPassword,
-            updatedAt: DateTime.now().millisecondsSinceEpoch,
-          ),
-        );
-      }
-
-      final imagesDir = await _getImagesDir();
-      for (final image in allImages) {
-        final imageFile = File('${imagesDir.path}/${image.filename}');
-        final thumbFile = File('${imagesDir.path}/${image.thumbnailFilename}');
-
-        if (await imageFile.exists()) {
-          final encryptedImageBytes = await imageFile.readAsBytes();
-          final decryptedImageBytes = await AESGCMHelper.decryptBytes(encryptedImageBytes, oldMasterKey);
-          await imageFile.writeAsBytes(await AESGCMHelper.encryptBytes(decryptedImageBytes, newMasterKey));
-        }
-
-        if (await thumbFile.exists()) {
-          final encryptedThumbBytes = await thumbFile.readAsBytes();
-          final decryptedThumbBytes = await AESGCMHelper.decryptBytes(encryptedThumbBytes, oldMasterKey);
-          await thumbFile.writeAsBytes(await AESGCMHelper.encryptBytes(decryptedThumbBytes, newMasterKey));
-        }
-      }
-
-      await SecureStorage.write(AppConstants.keySalt, base64Encode(newSalt));
-      await SecureStorage.write(AppConstants.keyMasterPasswordHash, newPasswordHash);
-
-      await _reEncryptForGesture(newMasterKey);
-      await _reEncryptForBiometric(newMasterKey);
-
-      authNotifier.unlock(masterKey: newMasterKey);
-      ToastUtils.showSuccess(context, '主密码修改成功');
-
-      ref.read(passwordProvider.notifier).loadEntries();
-    } catch (e) {
-      ToastUtils.showError(context, '修改失败: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
   Future<void> _reEncryptForGesture(Uint8List newMasterKey) async {
-    final storedGestureHash = await SecureStorage.read(AppConstants.keyGestureHash);
+    final storedGestureHash = await SecureStorage.read(
+      AppConstants.keyGestureHash,
+    );
     if (storedGestureHash != null) {
-      final gestureKey = Uint8List.fromList(utf8.encode(storedGestureHash.substring(0, 32)));
-      final newEncryptedMasterKey = await AESGCMHelper.encryptBytes(newMasterKey, gestureKey);
+      final gestureKey = Uint8List.fromList(
+        utf8.encode(storedGestureHash.substring(0, 32)),
+      );
+      final newEncryptedMasterKey = await AESGCMHelper.encryptBytes(
+        newMasterKey,
+        gestureKey,
+      );
       await SecureStorage.write(
         AppConstants.keyEncryptedMasterKeyForGesture,
         base64Encode(newEncryptedMasterKey),
@@ -158,21 +64,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _reEncryptForBiometric(Uint8List newMasterKey) async {
-    final biometricKeyBase64 = await SecureStorage.read(AppConstants.keyBiometricKeyId);
+    final biometricKeyBase64 = await SecureStorage.read(
+      AppConstants.keyBiometricKeyId,
+    );
     if (biometricKeyBase64 != null) {
       final biometricKey = base64Decode(biometricKeyBase64);
-      final newEncryptedMasterKey = await AESGCMHelper.encryptBytes(newMasterKey, biometricKey);
+      final newEncryptedMasterKey = await AESGCMHelper.encryptBytes(
+        newMasterKey,
+        biometricKey,
+      );
       await SecureStorage.write(
         AppConstants.keyEncryptedMasterKeyForBiometric,
         base64Encode(newEncryptedMasterKey),
       );
     }
-  }
-
-  Uint8List _deriveKeyFromRecovery(String recoveryKey) {
-    final bytes = utf8.encode(recoveryKey);
-    final hash = sha256.convert(bytes);
-    return Uint8List.fromList(hash.bytes);
   }
 
   // ========== 手势图案 ==========
@@ -185,7 +90,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     } else {
       final password = await _showPasswordDialog('验证身份', '请输入主密码');
       if (password != null && password.isNotEmpty) {
-        verified = await ref.read(authProvider.notifier).verifyMasterPassword(password);
+        verified = await ref
+            .read(authProvider.notifier)
+            .verifyMasterPassword(password);
         if (!verified && mounted) {
           ToastUtils.showError(context, '主密码错误，请重试');
         }
@@ -286,7 +193,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
         await Share.shareXFiles(
           [XFile(file.path)],
-          text: '密码管理器备份文件，请妥善保管\n'
+          text:
+              '密码管理器备份文件，请妥善保管\n'
               '导出时间：$exportTime\n'
               '包含 $entryCount 条密码记录',
         );
@@ -348,10 +256,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           Navigator.pop(context);
         }
       } else {
-        ToastUtils.showError(
-            context,
-            '导入失败：\n• 恢复密钥错误\n• 备份文件已损坏\n• 或文件版本不兼容'
-        );
+        ToastUtils.showError(context, '导入失败：\n• 恢复密钥错误\n• 备份文件已损坏\n• 或文件版本不兼容');
       }
     } catch (e) {
       ToastUtils.showError(context, '导入失败: $e');
@@ -377,10 +282,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  hint,
-                  style: const TextStyle(fontSize: 13),
-                ),
+                Text(hint, style: const TextStyle(fontSize: 13)),
                 const SizedBox(height: 2),
                 Text(
                   '（首次设置时抄写的128位十六进制字符串）',
@@ -393,7 +295,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     hintText: '输入恢复密钥...',
                     hintStyle: TextStyle(fontSize: 12),
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     isDense: true,
                   ),
                   maxLines: 2,
@@ -407,9 +312,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-            ),
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
             child: const Text('取消', style: TextStyle(fontSize: 14)),
           ),
           TextButton(
@@ -443,7 +346,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         await SecureStorage.clearAll();
         ref.read(authProvider.notifier).resetAllData();
         if (mounted) {
-          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.setup, (route) => false);
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRoutes.setup,
+            (route) => false,
+          );
         }
       } catch (e) {
         ToastUtils.showError(context, '清空失败: $e');
@@ -467,13 +374,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             decoration: InputDecoration(
               hintText: hint,
               border: const OutlineInputBorder(),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
             ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('确定')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('确定'),
+          ),
         ],
       ),
     );
@@ -496,7 +412,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         alignment: Alignment.centerLeft,
         child: Text(
           title,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.grey.shade600),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey.shade600,
+          ),
         ),
       ),
     );
@@ -511,7 +431,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }) {
     return ListTile(
       leading: Icon(icon, color: isDestructive ? Colors.red : null),
-      title: Text(title, style: isDestructive ? const TextStyle(color: Colors.red) : null),
+      title: Text(
+        title,
+        style: isDestructive ? const TextStyle(color: Colors.red) : null,
+      ),
       subtitle: subtitle != null ? Text(subtitle) : null,
       trailing: const Icon(Icons.chevron_right, size: 20),
       onTap: onTap,
@@ -610,12 +533,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Widget _buildCompressOption(
-      BuildContext context, {
-        required int level,
-        required String name,
-        required String subtitle,
-        required bool isDark,
-      }) {
+    BuildContext context, {
+    required int level,
+    required String name,
+    required String subtitle,
+    required bool isDark,
+  }) {
     final currentLevel = ref.watch(settingsProvider).imageCompressLevel;
     final isSelected = level == currentLevel;
 
@@ -629,7 +552,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         margin: const EdgeInsets.only(bottom: 4),
         decoration: BoxDecoration(
           color: isSelected
-              ? (isDark ? Colors.blue.shade800.withValues(alpha: 0.3) : Colors.blue.shade50)
+              ? (isDark
+                    ? Colors.blue.shade800.withValues(alpha: 0.3)
+                    : Colors.blue.shade50)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
@@ -645,7 +570,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               value: level,
               groupValue: currentLevel,
               onChanged: (value) {
-                ref.read(settingsProvider.notifier).setImageCompressLevel(level);
+                ref
+                    .read(settingsProvider.notifier)
+                    .setImageCompressLevel(level);
               },
             ),
             const SizedBox(width: 8),
@@ -657,7 +584,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     name,
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                       color: isDark ? Colors.white : Colors.black87,
                     ),
                   ),
@@ -665,18 +594,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     subtitle,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade600,
                     ),
                   ),
                 ],
               ),
             ),
             if (isSelected)
-              Icon(
-                Icons.check_circle,
-                color: Colors.blue,
-                size: 20,
-              ),
+              Icon(Icons.check_circle, color: Colors.blue, size: 20),
           ],
         ),
       ),
@@ -701,8 +628,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       _buildBiometricSection(settings),
       const Divider(),
       _buildSectionHeader('数据'),
-      _buildMenuItem(icon: Icons.backup, title: '导出备份', subtitle: '将数据导出到加密文件', onTap: _exportBackup),
-      _buildMenuItem(icon: Icons.restore, title: '导入备份', subtitle: '从备份文件恢复数据', onTap: _importBackup),
+      _buildMenuItem(
+        icon: Icons.backup,
+        title: '导出备份',
+        subtitle: '将数据导出到加密文件',
+        onTap: _exportBackup,
+      ),
+      _buildMenuItem(
+        icon: Icons.restore,
+        title: '导入备份',
+        subtitle: '从备份文件恢复数据',
+        onTap: _importBackup,
+      ),
       _buildMenuItem(
         icon: Icons.delete_sweep,
         title: '清空所有数据',
@@ -717,7 +654,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         title: '跟随系统',
         subtitle: '自动跟随系统深色/浅色模式',
         value: settings.darkModeFollowSystem,
-        onChanged: (value) => ref.read(settingsProvider.notifier).toggleDarkModeFollowSystem(value),
+        onChanged: (value) => ref
+            .read(settingsProvider.notifier)
+            .toggleDarkModeFollowSystem(value),
       ),
       _buildSwitchItem(
         icon: Icons.dark_mode,
@@ -726,7 +665,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         value: settings.isDarkMode,
         onChanged: settings.darkModeFollowSystem
             ? (_) {}
-            : (value) => ref.read(settingsProvider.notifier).toggleDarkMode(value),
+            : (value) =>
+                  ref.read(settingsProvider.notifier).toggleDarkMode(value),
       ),
       _buildMenuItem(
         icon: Icons.image,
@@ -744,7 +684,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       _buildMenuItem(
         icon: Icons.compress,
         title: '图片压缩',
-        subtitle: '当前: ${settings.compressLevelName} - ${settings.compressLevelSubtitle}',
+        subtitle:
+            '当前: ${settings.compressLevelName} - ${settings.compressLevelSubtitle}',
         onTap: () {
           _showCompressLevelDialog();
         },
@@ -754,7 +695,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       _buildMenuItem(
         icon: Icons.info_outline,
         title: '关于',
-        subtitle: '版本 1.0.0',
         onTap: () {
           Navigator.push(
             context,
@@ -774,9 +714,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           slivers: [
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate(items),
-              ),
+              sliver: SliverList(delegate: SliverChildListDelegate(items)),
             ),
             const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
           ],

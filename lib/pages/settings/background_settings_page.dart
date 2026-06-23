@@ -142,7 +142,7 @@ class _BackgroundSettingsPageState extends ConsumerState<BackgroundSettingsPage>
                           setState(() {
                             currentColor = color;
                           });
-                          ref.read(settingsProvider.notifier).setTextColor(color.value);
+                          ref.read(settingsProvider.notifier).setTextColor(color.toARGB32());
                         },
                         pickerAreaHeightPercent: 0.6,
                         portraitOnly: true,
@@ -583,7 +583,7 @@ class _BackgroundSettingsPageState extends ConsumerState<BackgroundSettingsPage>
       final isSelected = settings.textColorValue == color;
       return GestureDetector(
         onTap: () {
-          ref.read(settingsProvider.notifier).setTextColor(color.value);
+          ref.read(settingsProvider.notifier).setTextColor(color.toARGB32());
         },
         child: Container(
           width: 36,

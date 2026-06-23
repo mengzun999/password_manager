@@ -1,8 +1,4 @@
-// setup_biometric_page.dart
-
 import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:password_manager/constants/app_constants.dart';

@@ -1,5 +1,6 @@
 import 'dart:math'; // 用于 Random 随机数
 import 'dart:convert'; // 用于 base64 编解码
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class Helpers {
@@ -56,7 +57,7 @@ class Helpers {
       // ToastUtils.showSuccess(context, '已复制到剪贴板');
     } on PlatformException catch (e) {
       // 如果复制失败，可以在这里处理，比如打印日志或提示用户
-      print('复制失败: $e');
+      debugPrint('复制失败: $e');
       // ToastUtils.showError(context, '复制失败，请检查权限');
     }
   }

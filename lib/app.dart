@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:password_manager/providers/settings_provider.dart';
-import 'constants/app_constants.dart';
 import 'core/models/password_entry.dart';
 import 'pages/unlock/unlock_page.dart';
 import 'pages/setup/setup_master_password_page.dart';
@@ -39,7 +38,7 @@ class _MyAppState extends ConsumerState<MyApp> {
 
     return MaterialApp(
       title: '',  // ✅ 改为空字符串，状态栏不显示"密码管家"
-      // title: AppConstants.appName,  // ❌ 注释掉
+      // title: AppConstants.appName,
       theme: ThemeData.light(),
       darkTheme: ThemeData.dark(),
       themeMode: settingsState.themeMode,

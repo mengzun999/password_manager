@@ -1,8 +1,6 @@
-// core/services/biometric_service.dart
 
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import '../storage/shared_prefs.dart';
 
 /// 生物识别服务类
@@ -137,8 +135,6 @@ class BiometricService {
         return '指纹识别';
       case BiometricType.weak:
         return '人脸识别';
-      default:
-        return '生物识别';
     }
   }
 
@@ -155,8 +151,6 @@ class BiometricService {
         return Icons.fingerprint;
       case BiometricType.weak:
         return Icons.face;
-      default:
-        return Icons.security;
     }
   }
 }

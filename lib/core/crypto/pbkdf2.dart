@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:password_manager/constants/app_constants.dart';
 import 'package:pointycastle/export.dart';

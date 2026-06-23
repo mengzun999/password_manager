@@ -119,17 +119,18 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       authNotifier.unlock(masterKey: masterKey);
 
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.home,
-              (route) => false,
-        );
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(AppRoutes.home, (route) => false);
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
         _unlockMode = 0;
       });
-      ToastUtils.showError(context, '解锁失败，请使用主密码');
+      if (mounted) {
+        ToastUtils.showError(context, '解锁失败，请使用主密码');
+      }
     }
   }
 
@@ -192,10 +193,9 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       authNotifier.unlock(masterKey: masterKey);
 
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.home,
-              (route) => false,
-        );
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(AppRoutes.home, (route) => false);
       }
     } catch (e) {
       setState(() {
@@ -230,10 +230,9 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       authNotifier.unlock(masterKey: masterKey);
 
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.home,
-              (route) => false,
-        );
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(AppRoutes.home, (route) => false);
       }
     } else {
       setState(() {
@@ -258,10 +257,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '输入128位恢复密钥解锁应用',
-                  style: TextStyle(fontSize: 13),
-                ),
+                const Text('输入128位恢复密钥解锁应用', style: TextStyle(fontSize: 13)),
                 const SizedBox(height: 2),
                 const Text(
                   '（首次设置时抄写的128位十六进制字符串）',
@@ -274,7 +270,10 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                     hintText: '输入恢复密钥...',
                     hintStyle: TextStyle(fontSize: 12),
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     isDense: true,
                   ),
                   maxLines: 2,
@@ -288,9 +287,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-            ),
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
             child: const Text('取消', style: TextStyle(fontSize: 14)),
           ),
           TextButton(
@@ -317,18 +314,24 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     final key = inputKey.trim().replaceAll(RegExp(r'\s+'), '');
 
     if (key.length != 128) {
-      ToastUtils.showError(context, '恢复密钥长度错误（应为128位）');
+      if (mounted) {
+        ToastUtils.showError(context, '恢复密钥长度错误（应为128位）');
+      }
       return;
     }
 
     if (!RegExp(r'^[0-9a-fA-F]+$').hasMatch(key)) {
-      ToastUtils.showError(context, '恢复密钥格式错误');
+      if (mounted) {
+        ToastUtils.showError(context, '恢复密钥格式错误');
+      }
       return;
     }
 
     final storedHash = await SecureStorage.read(AppConstants.keyMnemonicHash);
     if (storedHash == null) {
-      ToastUtils.showError(context, '未设置恢复密钥');
+      if (mounted) {
+        ToastUtils.showError(context, '未设置恢复密钥');
+      }
       return;
     }
 
@@ -336,7 +339,9 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     final inputHash = sha256.convert(bytes).toString();
 
     if (inputHash != storedHash) {
-      ToastUtils.showError(context, '恢复密钥错误');
+      if (mounted) {
+        ToastUtils.showError(context, '恢复密钥错误');
+      }
       return;
     }
 
@@ -345,7 +350,9 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     );
 
     if (encryptedMasterKeyBase64 == null) {
-      ToastUtils.showError(context, '未找到加密的主密钥');
+      if (mounted) {
+        ToastUtils.showError(context, '未找到加密的主密钥');
+      }
       return;
     }
 
@@ -368,20 +375,20 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
       authNotifier.unlock(masterKey: masterKey);
 
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.home,
-              (route) => false,
-        );
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(AppRoutes.home, (route) => false);
       }
 
       // ✅ 移除重复弹窗
       // 用户已成功解锁，不需要额外弹窗提醒
-
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
-      ToastUtils.showError(context, '解锁失败: $e');
+      if (mounted) {
+        ToastUtils.showError(context, '解锁失败: $e');
+      }
     }
   }
 
@@ -407,9 +414,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
   @override
   Widget build(BuildContext context) {
     if (_isChecking) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return PopScope(
@@ -425,7 +430,9 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
           actions: [
             if (_hasGesture)
               TextButton(
-                onPressed: _unlockMode == 0 ? _switchToGesture : _switchToPassword,
+                onPressed: _unlockMode == 0
+                    ? _switchToGesture
+                    : _switchToPassword,
                 child: Text(_unlockMode == 0 ? '使用手势' : '使用密码'),
               ),
           ],
@@ -439,11 +446,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.lock,
-                    size: 60,
-                    color: Colors.grey[400],
-                  ),
+                  Icon(Icons.lock, size: 60, color: Colors.grey[400]),
                   const SizedBox(height: 24),
                   _unlockMode == 0
                       ? _buildPasswordInput()
@@ -506,13 +509,13 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
             ),
             child: _isLoading
                 ? const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
                 : const Text('解锁', style: TextStyle(fontSize: 16)),
           ),
         ),
