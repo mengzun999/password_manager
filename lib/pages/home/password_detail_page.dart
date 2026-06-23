@@ -323,6 +323,7 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> with Wi
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: const Text('密码详情'),
         actions: [
@@ -349,27 +350,30 @@ class _PasswordDetailPageState extends ConsumerState<PasswordDetailPage> with Wi
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          _buildContent(),
-          // ✅ 加载遮罩
-          if (_isLoadingFullImage)
-            Container(
-              color: Colors.black.withValues(alpha: 0.5),
-              child: const Center(
-                child: SizedBox(
-                  width: 50,
-                  height: 50,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 3,
-                    color: Colors.white,
+      body: SafeArea(  // ✅ 添加
+          bottom: true,  // ✅ 添加
+          child:Stack(
+            children: [
+              _buildContent(),
+              // ✅ 加载遮罩
+              if (_isLoadingFullImage)
+                Container(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  child: const Center(
+                    child: SizedBox(
+                      width: 50,
+                      height: 50,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 3,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-        ],
-      ),
-    );
+            ],
+          ),
+      )
+      );
   }
 
   Widget _buildContent() {

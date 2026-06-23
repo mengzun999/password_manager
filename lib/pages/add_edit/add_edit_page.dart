@@ -532,6 +532,7 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
     final allImageCount = _savedImageModels.length + _pendingImages.length;
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: Text(isEditMode ? '编辑密码' : '添加密码'),
         actions: [
@@ -541,141 +542,144 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 标题
-                TextField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(
-                    labelText: '标题 *',
-                    hintText: '例如：微信、支付宝',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
+      body: SafeArea(  // ✅ 添加
+          bottom: true,  // ✅ 添加
+          child:Stack(
+            children: [
+              SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 标题
+                    TextField(
+                      controller: _titleController,
+                      decoration: const InputDecoration(
+                        labelText: '标题 *',
+                        hintText: '例如：微信、支付宝',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                // 用户名
-                TextField(
-                  controller: _usernameController,
-                  decoration: const InputDecoration(
-                    labelText: '用户名',
-                    hintText: '手机号/邮箱/账号',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
+                    // 用户名
+                    TextField(
+                      controller: _usernameController,
+                      decoration: const InputDecoration(
+                        labelText: '用户名',
+                        hintText: '手机号/邮箱/账号',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                // 密码（可选）
-                TextField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: '密码（可选）',
-                    hintText: '留空表示不保存密码',
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () {
-                        setState(() => _obscurePassword = !_obscurePassword);
-                      },
+                    // 密码（可选）
+                    TextField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: '密码（可选）',
+                        hintText: '留空表示不保存密码',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () {
+                            setState(() => _obscurePassword = !_obscurePassword);
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // 备注
+                    TextField(
+                      controller: _notesController,
+                      decoration: const InputDecoration(
+                        labelText: '备注（可选）',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ========== 图片区域 ==========
+                    const Divider(),
+                    const SizedBox(height: 8),
+
+                    // 已保存的图片
+                    if (_savedImageThumbnails.isNotEmpty) ...[
+                      _buildSavedImagesSection(),
+                      const SizedBox(height: 8),
+                    ],
+
+                    // ✅ 待保存的图片（使用缓存的缩略图）
+                    if (_pendingThumbnails.isNotEmpty) ...[
+                      _buildPendingImagesSection(),
+                      const SizedBox(height: 8),
+                    ],
+
+                    // 添加图片按钮
+                    _buildAddImageButtons(),
+
+                    const SizedBox(height: 8),
+                    Text(
+                      '${allImageCount}/20 张',
+                      style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade500),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // 错误提示
+                    if (_error != null) ...[
+                      const SizedBox(height: 16),
+                      Text(_error!, style: const TextStyle(color: Colors.red)),
+                    ],
+
+                    const SizedBox(height: 80),
+                  ],
+                ),
+              ),
+
+              // ✅ 悬浮球 - 键盘弹出时隐藏
+              if (!_isKeyboardVisible)
+                Positioned(
+                  left: _fabPosition.dx,
+                  top: _fabPosition.dy,
+                  child: GestureDetector(
+                    onPanStart: (_) {
+                      setState(() => _isDragging = true);
+                    },
+                    onPanUpdate: (details) {
+                      final screenSize = MediaQuery.of(context).size;
+                      final buttonSize = 56.0;
+                      final padding = 16.0;
+
+                      double newDx = _fabPosition.dx + details.delta.dx;
+                      double newDy = _fabPosition.dy + details.delta.dy;
+
+                      final minY = padding + kToolbarHeight + 60;
+                      final maxY = screenSize.height - buttonSize - padding - 20;
+
+                      newDx = newDx.clamp(padding, screenSize.width - buttonSize - padding);
+                      newDy = newDy.clamp(minY, maxY);
+
+                      setState(() {
+                        _fabPosition = Offset(newDx, newDy);
+                      });
+                    },
+                    onPanEnd: (_) {
+                      setState(() => _isDragging = false);
+                      _saveFabPosition(_fabPosition);
+                    },
+                    child: PasswordGeneratorButton(
+                      onGenerate: _generatePassword,
+                      onClear: _clearPassword,
+                      isDark: isDark,
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-
-                // 备注
-                TextField(
-                  controller: _notesController,
-                  decoration: const InputDecoration(
-                    labelText: '备注（可选）',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-
-                // ========== 图片区域 ==========
-                const Divider(),
-                const SizedBox(height: 8),
-
-                // 已保存的图片
-                if (_savedImageThumbnails.isNotEmpty) ...[
-                  _buildSavedImagesSection(),
-                  const SizedBox(height: 8),
-                ],
-
-                // ✅ 待保存的图片（使用缓存的缩略图）
-                if (_pendingThumbnails.isNotEmpty) ...[
-                  _buildPendingImagesSection(),
-                  const SizedBox(height: 8),
-                ],
-
-                // 添加图片按钮
-                _buildAddImageButtons(),
-
-                const SizedBox(height: 8),
-                Text(
-                  '${allImageCount}/20 张',
-                  style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade500),
-                ),
-                const SizedBox(height: 8),
-
-                // 错误提示
-                if (_error != null) ...[
-                  const SizedBox(height: 16),
-                  Text(_error!, style: const TextStyle(color: Colors.red)),
-                ],
-
-                const SizedBox(height: 80),
-              ],
-            ),
+            ],
           ),
-
-          // ✅ 悬浮球 - 键盘弹出时隐藏
-          if (!_isKeyboardVisible)
-            Positioned(
-              left: _fabPosition.dx,
-              top: _fabPosition.dy,
-              child: GestureDetector(
-                onPanStart: (_) {
-                  setState(() => _isDragging = true);
-                },
-                onPanUpdate: (details) {
-                  final screenSize = MediaQuery.of(context).size;
-                  final buttonSize = 56.0;
-                  final padding = 16.0;
-
-                  double newDx = _fabPosition.dx + details.delta.dx;
-                  double newDy = _fabPosition.dy + details.delta.dy;
-
-                  final minY = padding + kToolbarHeight + 60;
-                  final maxY = screenSize.height - buttonSize - padding - 20;
-
-                  newDx = newDx.clamp(padding, screenSize.width - buttonSize - padding);
-                  newDy = newDy.clamp(minY, maxY);
-
-                  setState(() {
-                    _fabPosition = Offset(newDx, newDy);
-                  });
-                },
-                onPanEnd: (_) {
-                  setState(() => _isDragging = false);
-                  _saveFabPosition(_fabPosition);
-                },
-                child: PasswordGeneratorButton(
-                  onGenerate: _generatePassword,
-                  onClear: _clearPassword,
-                  isDark: isDark,
-                ),
-              ),
-            ),
-        ],
-      ),
+      )
     );
   }
 

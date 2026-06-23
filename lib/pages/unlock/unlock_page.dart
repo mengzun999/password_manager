@@ -415,6 +415,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
     return PopScope(
       canPop: false,
       child: Scaffold(
+        resizeToAvoidBottomInset: false,
         extendBodyBehindAppBar: true,
         appBar: AppBar(
           title: const Text('解锁'),
@@ -430,6 +431,7 @@ class _UnlockPageState extends ConsumerState<UnlockPage> {
           ],
         ),
         body: SafeArea(
+          bottom: true,
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),

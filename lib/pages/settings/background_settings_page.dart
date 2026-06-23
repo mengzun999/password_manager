@@ -201,59 +201,63 @@ class _BackgroundSettingsPageState extends ConsumerState<BackgroundSettingsPage>
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: const Text('背景图设置'),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ✅ 总开关
-            _buildEnableSwitch(settings, isDark),
+      body: SafeArea(  // ✅ 添加
+          bottom: true,  // ✅ 添加
+          child:_isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ✅ 总开关
+                _buildEnableSwitch(settings, isDark),
 
-            const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-            // ✅ 只有开关打开时才显示下面的内容
-            if (settings.backgroundEnabled) ...[
-              // 当前背景预览
-              _buildPreviewSection(settings, isDark),
+                // ✅ 只有开关打开时才显示下面的内容
+                if (settings.backgroundEnabled) ...[
+                  // 当前背景预览
+                  _buildPreviewSection(settings, isDark),
 
-              const SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
-              // 操作按钮
-              _buildActionButtons(settings),
+                  // 操作按钮
+                  _buildActionButtons(settings),
 
-              const SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
-              // 调节滑块
-              _buildSliders(settings, isDark),
+                  // 调节滑块
+                  _buildSliders(settings, isDark),
 
-              const SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
-              // ✅ 文字颜色选择 - 使用色盘
-              _buildColorPickerSection(settings),
-            ] else ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 40),
-                child: Center(
-                  child: Text(
-                    '开启后可以自定义密码列表页背景',
-                    style: TextStyle(
-                      color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
-                      fontSize: 14,
+                  // ✅ 文字颜色选择 - 使用色盘
+                  _buildColorPickerSection(settings),
+                ] else ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: Text(
+                        '开启后可以自定义密码列表页背景',
+                        style: TextStyle(
+                          color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-            ],
+                ],
 
-            const SizedBox(height: 40),
-          ],
-        ),
-      ),
+                const SizedBox(height: 40),
+              ],
+            ),
+          ),
+      )
     );
   }
 

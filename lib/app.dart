@@ -96,13 +96,9 @@ class _MyAppState extends ConsumerState<MyApp> {
         );
     }
 
-    // ✅ 唯一改动：统一包裹 SafeArea
+    // ✅ 移除 SafeArea，由每个页面自己控制
     return MaterialPageRoute(
-      builder: (_) => SafeArea(
-        top: false,      // ✅ 不保护顶部（保留状态栏透明）
-        bottom: true,
-        child: page,
-      ),
+      builder: (_) => page,
     );
   }
 }

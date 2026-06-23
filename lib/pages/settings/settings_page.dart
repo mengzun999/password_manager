@@ -689,6 +689,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     if (_isLoading || settings.isLoading) {
       return Scaffold(
+        resizeToAvoidBottomInset: false,
         appBar: AppBar(title: const Text('设置')),
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -765,8 +766,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     ];
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(title: const Text('设置')),
       body: SafeArea(
+        bottom: true,
         child: CustomScrollView(
           slivers: [
             SliverPadding(

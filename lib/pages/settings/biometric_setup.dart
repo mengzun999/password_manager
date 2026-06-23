@@ -220,10 +220,12 @@ class _BiometricSetupPageState extends ConsumerState<BiometricSetupPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: const Text('指纹设置'),
       ),
       body: SafeArea(
+        bottom: true,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
