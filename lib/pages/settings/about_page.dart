@@ -15,7 +15,7 @@ class AboutPage extends ConsumerStatefulWidget {
 }
 
 class _AboutPageState extends ConsumerState<AboutPage> {
-  final String _appVersion = '1.0.1';
+  final String _appVersion = '1.0.2';
   final String _author = '梦尊';
   final String _githubUrl = 'https://github.com/mengzun999/password_manager';
 
