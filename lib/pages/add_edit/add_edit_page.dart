@@ -566,7 +566,7 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
                     TextField(
                       controller: _usernameController,
                       decoration: const InputDecoration(
-                        labelText: '用户名',
+                        labelText: '用户名（可选）',
                         hintText: '手机号/邮箱/账号',
                         border: OutlineInputBorder(),
                       ),
@@ -578,7 +578,7 @@ class _AddEditPageState extends ConsumerState<AddEditPage> with WidgetsBindingOb
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       decoration: InputDecoration(
-                        labelText: '密码（可选）',
+                        labelText: '密码*',
                         hintText: '留空表示不保存密码',
                         border: const OutlineInputBorder(),
                         suffixIcon: IconButton(

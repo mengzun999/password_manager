@@ -48,7 +48,9 @@ class PasswordEntry {
   }
 
   /// 复制并修改部分字段
-  //比如你要修改一条密码的标题，可以用这个方法创建一个新的对象，只改标题，其他字段复制原来的。
+  ///
+  /// ⚠️ 注意：要清空某个可空字段，传入 null 即可
+  /// 例如：copyWith(notes: null) 会将备注清空
   PasswordEntry copyWith({
     String? id,
     String? title,
@@ -64,7 +66,7 @@ class PasswordEntry {
       title: title ?? this.title,
       username: username ?? this.username,
       encryptedPassword: encryptedPassword ?? this.encryptedPassword,
-      notes: notes ?? this.notes,
+      notes: notes,  // ✅ 直接赋值，允许设置为 null
       appPackageName: appPackageName ?? this.appPackageName,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

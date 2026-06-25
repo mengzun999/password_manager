@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_constants.dart';
 import '../core/storage/shared_prefs.dart';
 import '../core/services/biometric_service.dart';
@@ -281,5 +282,25 @@ class SettingsNotifier extends Notifier<SettingsState> {
   Future<void> setImageCompressLevel(int level) async {
     await SharedPrefs.setImageCompressLevel(level);
     state = state.copyWith(imageCompressLevel: level);
+  }
+
+  /// 重置所有设置（清空数据时调用）
+  Future<void> resetAllSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+
+    state = const SettingsState(
+      isDarkMode: false,
+      isBiometricEnabled: false,
+      darkModeFollowSystem: false,
+      isLoading: false,
+      isBiometricAvailable: false,
+      backgroundEnabled: false,
+      backgroundImagePath: null,
+      backgroundOpacity: 30,
+      backgroundBlur: 10,
+      textColor: 0xFF000000,
+      imageCompressLevel: AppConstants.compressLevelMedium,
+    );
   }
 }

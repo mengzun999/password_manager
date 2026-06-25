@@ -12,6 +12,7 @@ import 'package:password_manager/providers/auth_provider.dart';
 import 'package:password_manager/providers/password_provider.dart';
 import 'package:password_manager/providers/settings_provider.dart';
 import 'package:password_manager/widgets/gesture_pattern_view.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/toast_utils.dart';
 import 'about_page.dart';
 import 'background_settings_page.dart';
@@ -38,6 +39,75 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   void initState() {
     super.initState();
     _loadSettings();
+  }
+
+  /// 完全自定义的、不受键盘和 viewInsets 顶推干扰的绝对居中二次确认对话框
+  Future<bool> _showCustomConfirmDialog({
+    required String title,
+    required String content,
+    required String confirmText,
+    bool isDanger = false,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true, // 强制使用根路由
+      builder: (context) {
+        return Material(
+          type: MaterialType.transparency, // 透明遮罩
+          child: Center( // 👈 核心：绝对物理居中
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 40),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Theme.of(context).dialogBackgroundColor,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    content,
+                    style: TextStyle(
+                        fontSize: 15,
+                        color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.8)
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('取消'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        // 如果是高危操作（清空所有），确认按钮使用红色
+                        child: Text(
+                          confirmText,
+                          style: TextStyle(
+                            color: isDanger ? Colors.red : Theme.of(context).primaryColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    return result ?? false;
   }
 
   Future<void> _loadSettings() async {
@@ -162,7 +232,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _exportBackup() async {
     final recoveryKey = await _showRecoveryKeyDialog(
       title: '验证恢复密钥',
-      hint: '请输入128位恢复密钥（128个十六进制字符）',
+      hint: '请输入128位恢复密钥',
     );
     if (recoveryKey == null || recoveryKey.isEmpty) {
       ToastUtils.showWarning(context, '已取消导出');
@@ -267,89 +337,108 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<String?> _showRecoveryKeyDialog({
     String title = '输入恢复密钥',
-    String hint = '请输入32字符的恢复密钥（128位）',
+    String hint = '请输入128位的恢复密钥',
   }) async {
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Text(title, style: const TextStyle(fontSize: 16)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(hint, style: const TextStyle(fontSize: 13)),
-                const SizedBox(height: 2),
-                Text(
-                  '（首次设置时抄写的128位十六进制字符串）',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    hintText: '输入恢复密钥...',
-                    hintStyle: TextStyle(fontSize: 12),
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    isDense: true,
+      useRootNavigator: true,
+      builder: (context) {
+        return Material(
+          type: MaterialType.transparency,
+          child: Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 40),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Theme.of(context).dialogBackgroundColor,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                  maxLines: 2,
-                  minLines: 1,
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    autofocus: false,  // ✅ 不自动弹出键盘
+                    textInputAction: TextInputAction.done,
+                    maxLength: 128,
+                    maxLines: 3,
+                    minLines: 2,
+                    decoration: InputDecoration(
+                      hintText: hint,
+                      hintStyle: const TextStyle(fontSize: 14),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    onSubmitted: (_) {
+                      // 按回车键时触发确定
+                      Navigator.pop(context, controller.text);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('取消'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, controller.text),
+                        child: const Text('确定'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-            child: const Text('取消', style: TextStyle(fontSize: 14)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.orange,
-              visualDensity: VisualDensity.compact,
-            ),
-            child: const Text('确认', style: TextStyle(fontSize: 14)),
-          ),
-        ],
-        actionsPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-      ),
+        );
+      },
     );
   }
 
   // ========== 清空数据 ==========
   Future<void> _clearAllData() async {
-    final confirmed = await ToastUtils.showDangerConfirmDialog(
-      context,
+    final confirmed = await _showCustomConfirmDialog(
       title: '危险操作',
       content: '确定要清空所有数据吗？此操作不可恢复！',
       confirmText: '清空',
+      isDanger: true,
     );
 
     if (confirmed == true) {
       setState(() => _isLoading = true);
       try {
+        // 1. 清空数据库和图片文件
         await DatabaseHelper.clearAllData();
+
+        // 2. 清空 SecureStorage
         await SecureStorage.clearAll();
+
+        // 3. ✅ 清空 SharedPreferences（包括背景图设置、暗黑模式等）
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+
+        // 4. 重置认证状态
         ref.read(authProvider.notifier).resetAllData();
+
+        // 5. 重置设置状态
+        ref.read(settingsProvider.notifier).resetAllSettings();
+
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(
             context,
             AppRoutes.setup,
-            (route) => false,
+                (route) => false,
           );
         }
       } catch (e) {
@@ -359,39 +448,66 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
+
   // ========== 辅助方法 ==========
   Future<String?> _showPasswordDialog(String title, String hint) async {
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: TextField(
-            controller: controller,
-            obscureText: true,
-            decoration: InputDecoration(
-              hintText: hint,
-              border: const OutlineInputBorder(),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
+      // 强制使用 RootNavigator，有时非 Root 在 Insets 混乱时更难感知物理高宽
+      useRootNavigator: true,
+      builder: (context) {
+        return Material(
+          type: MaterialType.transparency, // 保证遮罩层透明
+          child: Center( // 👈 强制让内容在全局居中，不再受默认 AlertDialog 的 insetPadding 摆布
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 40),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                // 模拟系统的 AlertDialog 样式，可以根据你的主题调整颜色
+                color: Theme.of(context).dialogBackgroundColor,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min, // 👈 关键：包裹内容
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    obscureText: true,
+                    autofocus: true, // 让它主动聚焦
+                    decoration: InputDecoration(
+                      hintText: hint,
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('取消'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, controller.text),
+                        child: const Text('确定'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('确定'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -488,47 +604,71 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
-  // ========== 图片压缩档位选择 ==========
+// ========== 图片压缩档位选择 ==========
   Future<void> _showCompressLevelDialog() async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('图片压缩'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildCompressOption(
-              context,
-              level: AppConstants.compressLevelOriginal,
-              name: AppConstants.compressLevelNameOriginal,
-              subtitle: AppConstants.compressLevelSubtitleOriginal,
-              isDark: isDark,
+      useRootNavigator: true,  // ✅ 加上
+      builder: (context) {
+        return Material(
+          type: MaterialType.transparency,
+          child: Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 40),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Theme.of(context).dialogBackgroundColor,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '图片压缩',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildCompressOption(
+                    context,
+                    level: AppConstants.compressLevelOriginal,
+                    name: AppConstants.compressLevelNameOriginal,
+                    subtitle: AppConstants.compressLevelSubtitleOriginal,
+                    isDark: isDark,
+                  ),
+                  _buildCompressOption(
+                    context,
+                    level: AppConstants.compressLevelHigh,
+                    name: AppConstants.compressLevelNameHigh,
+                    subtitle: AppConstants.compressLevelSubtitleHigh,
+                    isDark: isDark,
+                  ),
+                  _buildCompressOption(
+                    context,
+                    level: AppConstants.compressLevelMedium,
+                    name: AppConstants.compressLevelNameMedium,
+                    subtitle: AppConstants.compressLevelSubtitleMedium,
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('关闭'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            _buildCompressOption(
-              context,
-              level: AppConstants.compressLevelHigh,
-              name: AppConstants.compressLevelNameHigh,
-              subtitle: AppConstants.compressLevelSubtitleHigh,
-              isDark: isDark,
-            ),
-            _buildCompressOption(
-              context,
-              level: AppConstants.compressLevelMedium,
-              name: AppConstants.compressLevelNameMedium,
-              subtitle: AppConstants.compressLevelSubtitleMedium,
-              isDark: isDark,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
