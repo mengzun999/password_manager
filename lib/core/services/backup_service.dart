@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:crypto/crypto.dart';
 import '../storage/database.dart';
 import '../crypto/aes_gcm.dart';
@@ -29,7 +29,7 @@ class BackupService {
 
   static Future<Map<String, dynamic>?> exportBackup(
       String recoveryKeyInput,
-      Uint8List masterKey,  // ✅ 新增：当前主密钥
+      Uint8List masterKey, // ✅ 新增：当前主密钥
       ) async {
     try {
       final key = recoveryKeyInput.trim().replaceAll(RegExp(r'\s+'), '');
@@ -327,20 +327,26 @@ class BackupService {
   // ============================================================
 
   static Future<String?> pickBackupFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-      dialogTitle: '选择备份文件',
+    final XFile? file = await openFile(
+      acceptedTypeGroups: [
+        XTypeGroup(
+          label: '备份文件',
+          extensions: ['enc'],
+        ),
+        XTypeGroup(
+          label: '所有文件',
+          extensions: [],
+        ),
+      ],
     );
-
-    if (result != null && result.files.single.path != null) {
-      final path = result.files.single.path!;
-      if (path.endsWith('.enc')) {
-        return path;
-      }
-      return null;
+    if (file == null) return null;
+    final path = file.path;
+    if (path.endsWith('.enc')) {
+      return path;
     }
     return null;
   }
+
 
   static Future<Directory> _getImagesDir() async {
     final supportDir = await getApplicationSupportDirectory();
